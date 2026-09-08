@@ -12,10 +12,18 @@ import {
   drawRule,
   drawTriangle,
   FONT_SMALL,
+  FONT_TITLE,
+  measureLabel,
   playerColor,
 } from "../core/ui";
 import { drawControlsModal } from "../core/controls";
 import { drawHints, type Hint } from "../core/prompts";
+import {
+  isLocked,
+  LOCKED_TITLE,
+  unlockCountdownLine,
+  unlockStampText,
+} from "../core/unlocks";
 import { GAMES } from "../games/registry";
 
 /**
@@ -29,6 +37,12 @@ import { GAMES } from "../games/registry";
  * Everything is drawn in one `onDraw` rather than built from objects: the
  * selection moves constantly, and rebuilding a list of game objects on every
  * input is exactly the churn to avoid on a machine that stays on for hours.
+ *
+ * A game with an unlock time that has not passed yet (`core/unlocks.ts`) is
+ * still on the carousel, but as `???` over a dimmed preview with the
+ * countdown under it: the card is the advert for the game, so hiding it
+ * entirely would lose the thing the countdown is for. The menu is the only
+ * gate — pressing A on a locked card refuses and says how long is left.
  */
 
 const HEADER_H = 15;
@@ -44,9 +58,36 @@ const STRIDE = DESIGN_WIDTH;
 const PREVIEW_INSET = 8;
 const PREVIEW_H = 124;
 const FONT_GAME_TITLE = 24;
+/**
+ * `???` sits one size down, on `FONT_TITLE`: a locked card carries two extra
+ * lines under it — the countdown and the stamp — and at 24 the last of them
+ * runs into the bottom of the card.
+ */
+const FONT_LOCKED_TITLE = FONT_TITLE;
 
 /** How fast the track settles on the selected card. */
 const SLIDE_SPEED = 11;
+
+/** How long the refusal reads for after A on a locked card. */
+const LOCKED_FLASH_SECONDS = 0.75;
+/** Flashes per second of the refused card's outline. */
+const LOCKED_FLASH_HZ = 6;
+
+/** The padlock over a locked preview, in design units. Chunky on purpose. */
+const LOCK_BODY_W = 26;
+const LOCK_BODY_H = 20;
+const LOCK_SHACKLE_W = 16;
+const LOCK_SHACKLE_H = 10;
+/** Bar thickness of the shackle and the keyhole; 3 units reads at distance. */
+const LOCK_BAR = 3;
+
+/**
+ * How much of the preview shows through on a locked card.
+ *
+ * Dimmed rather than blanked: the animation says there is a game there, and
+ * at this opacity you can read that it is *a* game without reading *which*.
+ */
+const LOCKED_PREVIEW_VEIL = 0.82;
 
 /** Built once: `onDraw` must not allocate. */
 const FOOTER_HINTS: readonly Hint[] = [
@@ -61,9 +102,49 @@ const FOOTER_HINTS: readonly Hint[] = [
   { text: "CONTROLS" },
 ];
 
-function drawCard(game: GameDefinition, offset: number, focused: boolean, t: number): void {
-  const x = CARD_MARGIN + offset * STRIDE;
-  const accent = C[game.accent];
+/**
+ * The padlock over a locked preview: shackle, body, keyhole.
+ *
+ * Assembled from boxes rather than a sprite so it stays in design units and
+ * scales with the cabinet like everything else. Bars are 3 units — a 1-unit
+ * outline would vanish against a moving preview.
+ */
+function drawLockGlyph(cx: number, cy: number): void {
+  const top = cy - (LOCK_SHACKLE_H + LOCK_BODY_H) / 2;
+  const shackleX = cx - LOCK_SHACKLE_W / 2;
+  const postH = LOCK_SHACKLE_H - LOCK_BAR;
+  drawBox({ x: shackleX, y: top, w: LOCK_SHACKLE_W, h: LOCK_BAR, color: C.textDim });
+  drawBox({ x: shackleX, y: top + LOCK_BAR, w: LOCK_BAR, h: postH, color: C.textDim });
+  drawBox({
+    x: shackleX + LOCK_SHACKLE_W - LOCK_BAR,
+    y: top + LOCK_BAR,
+    w: LOCK_BAR,
+    h: postH,
+    color: C.textDim,
+  });
+  const bodyY = top + LOCK_SHACKLE_H;
+  drawBox({ x: cx - LOCK_BODY_W / 2, y: bodyY, w: LOCK_BODY_W, h: LOCK_BODY_H, color: C.textDim });
+  // Keyhole: punched in the card fill, so the body reads as solid.
+  drawBox({ x: cx - LOCK_BAR / 2, y: bodyY + 6, w: LOCK_BAR, h: LOCK_BODY_H - 11, color: C.bg });
+}
+
+function drawCard(opts: {
+  game: GameDefinition;
+  offset: number;
+  focused: boolean;
+  t: number;
+  /** Unlock time not reached: `???`, dimmed preview, countdown. */
+  locked: boolean;
+  /** This card was just refused, and is on the bright half of the flash. */
+  refused: boolean;
+  now: number;
+}): void {
+  const { game, focused, locked, refused } = opts;
+  const x = CARD_MARGIN + opts.offset * STRIDE;
+  // A locked card gives up its accent: the colour is part of the game's
+  // identity, and the identity is the thing being held back.
+  const accent = locked ? C.dim : C[game.accent];
+  const outline = refused ? C.bad : focused ? accent : C.dim;
 
   drawPanel({
     x,
@@ -71,7 +152,7 @@ function drawCard(game: GameDefinition, offset: number, focused: boolean, t: num
     w: CARD_W,
     h: CARD_H,
     fill: focused ? C.bgAlt : C.bg,
-    outline: focused ? accent : C.dim,
+    outline,
   });
 
   // Preview fills the top of the card and does the heavy lifting visually.
@@ -84,40 +165,67 @@ function drawCard(game: GameDefinition, offset: number, focused: boolean, t: num
     w: previewW,
     h: PREVIEW_H,
     color: C.black,
-    outline: focused ? accent : C.dim,
+    outline,
   });
   if (game.drawPreview) {
-    game.drawPreview(previewX + 1, previewY + 1, previewW - 2, PREVIEW_H - 2, t);
+    game.drawPreview(previewX + 1, previewY + 1, previewW - 2, PREVIEW_H - 2, opts.t);
+  }
+  if (locked) {
+    // Veil over the running preview, then the padlock on top of it.
+    drawBox({
+      x: previewX + 1,
+      y: previewY + 1,
+      w: previewW - 2,
+      h: PREVIEW_H - 2,
+      color: C.bg,
+      opacity: LOCKED_PREVIEW_VEIL,
+    });
+    drawLockGlyph(previewX + previewW / 2, previewY + PREVIEW_H / 2);
   }
 
   const textCenter = x + CARD_W / 2;
+  const titleSize = locked ? FONT_LOCKED_TITLE : FONT_GAME_TITLE;
   let y = previewY + PREVIEW_H + 6;
   drawLabel({
-    text: game.title,
+    text: locked ? LOCKED_TITLE : game.title,
     x: textCenter,
     y,
-    size: FONT_GAME_TITLE,
+    size: titleSize,
     color: focused ? C.text : C.textDim,
     anchor: "center",
   });
-  y += FONT_GAME_TITLE + 4;
+  y += titleSize + 4;
   drawLabel({
-    text: game.players,
+    text: locked ? "LOCKED" : game.players,
     x: textCenter,
     y,
     size: FONT_SMALL,
-    color: accent,
+    color: locked ? C.bad : accent,
     anchor: "center",
   });
   y += FONT_SMALL + 3;
+  // The tagline would give the game away, so the countdown takes its line —
+  // and the countdown is the reason a locked card is on the carousel at all.
   drawLabel({
-    text: game.tagline,
+    text: locked ? unlockCountdownLine(game.id, opts.now) : game.tagline,
     x: textCenter,
     y,
     size: FONT_SMALL,
-    color: C.textDim,
+    color: locked ? C.accent : C.textDim,
     anchor: "center",
   });
+  if (locked) {
+    // "Come back at 14:00" is more use than a countdown for a long wait.
+    y += FONT_SMALL + 3;
+    drawLabel({
+      text: unlockStampText(game.id),
+      x: textCenter,
+      y,
+      size: FONT_SMALL,
+      color: C.textDim,
+      anchor: "center",
+    });
+  }
 }
 
 function main(): void {
@@ -129,9 +237,28 @@ function main(): void {
   let elapsed = 0;
   /** Controls modal for the selected game; swallows browsing while open. */
   let controlsOpen = false;
+  /** Seconds left of the refusal after A/Y on a locked card. */
+  let lockedFlash = 0;
 
   function selected(): number {
     return ((virtualIndex % count) + count) % count;
+  }
+
+  /**
+   * Launch the selected game, or refuse it if its unlock time is still ahead.
+   *
+   * The check is here rather than in the game scenes because the menu is the
+   * only way in: a locked scene is unreachable, so a guard per game would be
+   * two more places to forget.
+   */
+  function launchSelected(): void {
+    const game = GAMES[selected()];
+    if (!game) return;
+    if (isLocked(game.id, Date.now())) {
+      lockedFlash = LOCKED_FLASH_SECONDS;
+      return;
+    }
+    goTo(game.id);
   }
 
   // Input test / button setup live behind F4 rather than a button sequence:
@@ -145,14 +272,14 @@ function main(): void {
   k.onUpdate(() => {
     const dt = k.dt();
     elapsed += dt;
+    if (lockedFlash > 0) lockedFlash = Math.max(0, lockedFlash - dt);
 
     for (let p = 0; p < MAX_PLAYERS; p++) {
       if (controlsOpen) {
         // A/Start still launches, so "read the controls, then play" is one
         // press rather than a close-then-confirm.
         if (input.pressed(p, "a") || input.pressed(p, "start")) {
-          const game = GAMES[selected()];
-          if (game) goTo(game.id);
+          launchSelected();
         } else if (input.pressed(p, "b") || input.pressed(p, "y") || input.pressed(p, "back")) {
           controlsOpen = false;
           break;
@@ -163,17 +290,20 @@ function main(): void {
       // `break` so the press that opened the modal is not also read as the
       // press that closes it.
       if (input.pressed(p, "y")) {
-        controlsOpen = true;
+        // The controls list names the game in its header and would launch it
+        // from A, so a locked card refuses here too.
+        if (isLocked(GAMES[selected()]?.id ?? "", Date.now())) {
+          lockedFlash = LOCKED_FLASH_SECONDS;
+        } else {
+          controlsOpen = true;
+        }
         break;
       }
       // Up/down are accepted as well: on a d-pad people try both, and there
       // is nothing else for them to mean here.
       if (input.repeated(p, "right") || input.repeated(p, "down")) virtualIndex++;
       if (input.repeated(p, "left") || input.repeated(p, "up")) virtualIndex--;
-      if (input.pressed(p, "a") || input.pressed(p, "start")) {
-        const game = GAMES[selected()];
-        if (game) goTo(game.id);
-      }
+      if (input.pressed(p, "a") || input.pressed(p, "start")) launchSelected();
     }
 
     // Exponential ease, framerate independent.
@@ -182,6 +312,14 @@ function main(): void {
   });
 
   k.onDraw(() => {
+    const now = Date.now();
+    const active = selected();
+    const activeGame = GAMES[active];
+    const activeLocked = activeGame !== undefined && isLocked(activeGame.id, now);
+    // Square wave, so the refused card blinks rather than fading — a fade
+    // reads as an animation, a blink reads as "no".
+    const flashOn = lockedFlash > 0 && Math.floor(lockedFlash * LOCKED_FLASH_HZ * 2) % 2 === 1;
+
     // --- header ---
     drawLabel({
       text: "TARMAC",
@@ -215,7 +353,19 @@ function main(): void {
       const index = ((i % count) + count) % count;
       const game = GAMES[index];
       if (!game) continue;
-      drawCard(game, offset, Math.abs(offset) < 0.5, elapsed);
+      const focused = Math.abs(offset) < 0.5;
+      const locked = isLocked(game.id, now);
+      drawCard({
+        game,
+        offset,
+        focused,
+        t: elapsed,
+        locked,
+        // Gated on `locked` too, so browsing away mid-flash does not leave
+        // the refusal colour on an unlocked card.
+        refused: focused && locked && flashOn,
+        now,
+      });
     }
 
     // --- navigation arrows, only when there is somewhere to go ---
@@ -243,7 +393,6 @@ function main(): void {
 
     // --- footer: position dots on the left, controls on the right ---
     drawRule(DESIGN_HEIGHT - FOOTER_H);
-    const active = selected();
     for (let i = 0; i < count; i++) {
       const on = i === active;
       // Kept chunky: a 2-unit dot would be a smear at this design resolution.
@@ -256,12 +405,35 @@ function main(): void {
         color: on ? C.accent : C.dim,
       });
     }
-    drawHints({
-      x: DESIGN_WIDTH - 5,
-      y: DESIGN_HEIGHT - FOOTER_H + 1,
-      align: "right",
-      hints: FOOTER_HINTS,
-    });
+    // The refusal takes the hint row: it is the widest space in the footer,
+    // and while it is up the hints it replaces are the ones that just failed.
+    if (lockedFlash > 0 && activeGame && activeLocked) {
+      const y = DESIGN_HEIGHT - FOOTER_H + 4;
+      const line = unlockCountdownLine(activeGame.id, now);
+      drawLabel({
+        text: line,
+        x: DESIGN_WIDTH - 5,
+        y,
+        size: FONT_SMALL,
+        color: C.accent,
+        anchor: "right",
+      });
+      drawLabel({
+        text: "LOCKED",
+        x: DESIGN_WIDTH - 5 - measureLabel(line, FONT_SMALL) - 6,
+        y,
+        size: FONT_SMALL,
+        color: C.bad,
+        anchor: "right",
+      });
+    } else {
+      drawHints({
+        x: DESIGN_WIDTH - 5,
+        y: DESIGN_HEIGHT - FOOTER_H + 1,
+        align: "right",
+        hints: FOOTER_HINTS,
+      });
+    }
 
     // --- controls modal, over the settled card ---
     if (controlsOpen) {

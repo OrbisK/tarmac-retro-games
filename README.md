@@ -83,13 +83,56 @@ buttons report the wrong indices.
 | --- | --- |
 | Up / Down | pick a row |
 | Left / Right | change the game scale |
-| Right | on the reset row, restore defaults |
+| Right | enter an unlock row, or restore defaults on the reset row |
 | L | back to the input test |
 | hold Back | menu |
 
-One setting so far, **game scale** — see below. Each game draws its own sample
+**Game scale** is the first row — see below. Each game draws its own sample
 underneath at true size, so the effect is visible without launching a match.
 Settings live in `localStorage` under `tarmac.settings.v1`.
+
+Then one row per game: its **unlock time**, below. The reset row restores both
+— the scale, and every unlock time — and says `CHANGED` whenever either is off
+its default.
+
+## Timed unlocks
+
+A game can be held back until a moment you set, so an event can drop games
+over the course of a day. Until then the menu shows the card as `???` over a
+dimmed preview with a live countdown, and refuses to launch it.
+
+Each game's row on the options screen carries the whole schedule:
+
+```
+PONG        ON   8 SEP 2026 20:00                    3D 01H
+SNAKE DUEL  OFF  8 SEP 2026 18:00                      OPEN
+```
+
+Left to right: whether the schedule is in force, the release timestamp field
+by field, and what that means right now — `OPEN`, or the countdown a player
+will see. The countdown is the check on the cabinet's clock: if it reads wrong
+here, the machine's own time is wrong. A row switched `OFF` keeps its time,
+dimmed, so a schedule can be set up before it is armed.
+
+Editing a row, with four directions and no confirm button:
+
+| Key | Action |
+| --- | --- |
+| Right | enter the row, on the ON/OFF field |
+| Left / Right | move between fields |
+| Up / Down | change the field under the cursor |
+| Left, on ON/OFF | leave the row |
+
+Up/Down are the row picker until you enter a row and the value knob after,
+which is the only way to fit a timestamp editor into direction-only
+navigation. Values auto-repeat when held, and they carry: minute 59 stepped up
+is the next hour, day 31 the 1st of the next month. Stepping the month or the
+year clamps the day instead, so 31 MAR moved to February lands on the 28th.
+
+Unlock times live in `localStorage` under `tarmac.unlocks.v1`, keyed by game
+id, and are read against the machine's local clock — there is nothing else to
+ask on a cabinet with no network. A game whose id is not in the registry keeps
+its stored time, so a game pulled for one event and put back does not lose it.
 
 ## Layout
 
@@ -111,6 +154,7 @@ src/
     controls.ts        the per-game controls modal shown from the menu
     bindings.ts        per-controller button bindings + localStorage
     settings.ts        game scale + localStorage
+    unlocks.ts         per-game release times + countdown strings
     cheat.ts           hidden button-sequence matcher
   games/
     registry.ts        the menu's game list
@@ -212,7 +256,8 @@ one allocation covers every scale.
 
 Nothing else changes — the menu builds itself from the registry, including the
 optional animated `drawPreview` thumbnail, and the options screen picks up the
-optional `drawScaleSample` the same way.
+optional `drawScaleSample` the same way and gives the game an unlock row of
+its own.
 
 ## Keeping it leak-free
 
@@ -262,6 +307,16 @@ length. That is what makes wrapping from the last game to the first slide
 continuously instead of rewinding across the whole track. At most three cards
 are drawn during a slide and one when settled, and `drawLetterboxBars()` runs
 last to clip whatever slid past the design box.
+
+A game whose unlock time has not passed yet stays on the carousel as `???`:
+the preview still runs under a veil with a padlock over it, and the card's
+own lines carry `LOCKED`, the countdown and the release stamp. It keeps its
+place in the list because the countdown is the point — a card nobody can see
+advertises nothing. A/Start on it blinks the card red and puts
+`LOCKED  UNLOCKS IN …` where the footer hints were, and **Y** is refused the
+same way, since the controls modal names the game in its header and can launch
+it. The menu is the only gate: the game's own scene is unreachable except
+through here, so there is no second check to keep in sync.
 
 **Y** opens the selected game's controls modal — one glyph row per action,
 drawn from the `controls` in its `GameDefinition`, so a rebound button shows

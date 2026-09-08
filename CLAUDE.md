@@ -38,6 +38,23 @@ layout margins, the menu and all chrome are unaffected.
 - A game with scale-sensitive elements should implement `drawScaleSample` so
   the options screen can show it.
 
+## Timed unlocks
+
+A game can be gated behind a release time (`core/unlocks.ts`, options screen).
+
+- **The menu is the only gate.** Games do not check; their scenes are only
+  reachable through the carousel, so a second check would be a second place
+  to forget. Anything new that can start a game calls `isLocked` first.
+- A locked game is still on the carousel, as `???` over a dimmed preview with
+  its countdown. Never show the title, tagline or accent colour of a locked
+  game, and never open its controls modal — the modal names it and launches
+  it.
+- Countdown and stamp strings come from `unlocks.ts` already built and cached
+  per game, because both screens draw them every frame and `onDraw` must not
+  allocate. Format there, not at the call site.
+- The clock is the machine's local clock, read as `Date.now()` per frame — so
+  a card unlocks while the menu is open without anything watching for it.
+
 ## Always high contrast
 
 Every colour used for text sits at 6.5:1 or better against `bg`; the border
