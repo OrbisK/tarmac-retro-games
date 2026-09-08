@@ -19,6 +19,7 @@ npm run typecheck
 | Confirm (A) | A / south | A / south | `Space` / `F` | `.` |
 | Start | Start | Start | `Enter` | `Shift` |
 | Quit to menu | hold Select 0.7s | hold Select 0.7s | hold `Esc` | hold `Backspace` |
+| Controls modal (menu) | Y | Y | `E` | `/` |
 | Debug overlay | hold Select + tap Start | " | `F3` | `F3` |
 | Options / input test | see calibration below | " | `F5` / `F4` | `F5` / `F4` |
 
@@ -107,6 +108,7 @@ src/
     game.ts            GameDefinition — the contract a game implements
     debugHud.ts        F3 overlay: fps, object count, heap trend, live input
     buttons.ts         the logical button vocabulary games code against
+    controls.ts        the per-game controls modal shown from the menu
     bindings.ts        per-controller button bindings + localStorage
     settings.ts        game scale + localStorage
     cheat.ts           hidden button-sequence matcher
@@ -202,7 +204,10 @@ one allocation covers every scale.
 ### Adding a game
 
 1. Write `src/games/yourGame.ts` exporting a `GameDefinition` whose
-   `register()` calls `defineScene(id, body)`.
+   `register()` calls `defineScene(id, body)`. Its `controls` rows are
+   required — they are the only place a player at the cabinet can read what
+   the buttons do. List the game's own actions only; the modal adds the
+   "hold Back to quit" line itself.
 2. Add it to `GAMES` in `src/games/registry.ts`.
 
 Nothing else changes — the menu builds itself from the registry, including the
@@ -257,6 +262,14 @@ length. That is what makes wrapping from the last game to the first slide
 continuously instead of rewinding across the whole track. At most three cards
 are drawn during a slide and one when settled, and `drawLetterboxBars()` runs
 last to clip whatever slid past the design box.
+
+**Y** opens the selected game's controls modal — one glyph row per action,
+drawn from the `controls` in its `GameDefinition`, so a rebound button shows
+up as the button that now drives it. A/Start plays straight from the modal,
+B closes it; browsing is ignored while it is open, so the card underneath
+cannot change out from under the list. A keyboard line appears only while no
+pad is connected at all — as soon as there is one, the glyph rows are the
+whole story.
 
 Each game's `drawPreview(x, y, w, h, t)` fills the card's banner. Previews must
 size everything from the box they are handed — the same function is drawn

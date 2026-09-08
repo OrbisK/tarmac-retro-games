@@ -14,7 +14,8 @@ import {
   FONT_SMALL,
   playerColor,
 } from "../core/ui";
-import { drawHints } from "../core/prompts";
+import { drawControlsModal } from "../core/controls";
+import { drawHints, type Hint } from "../core/prompts";
 import { GAMES } from "../games/registry";
 
 /**
@@ -46,6 +47,19 @@ const FONT_GAME_TITLE = 24;
 
 /** How fast the track settles on the selected card. */
 const SLIDE_SPEED = 11;
+
+/** Built once: `onDraw` must not allocate. */
+const FOOTER_HINTS: readonly Hint[] = [
+  { button: "left" },
+  { button: "right" },
+  { text: "BROWSE" },
+  { gap: 6 },
+  { button: "a" },
+  { text: "PLAY" },
+  { gap: 6 },
+  { button: "y" },
+  { text: "CONTROLS" },
+];
 
 function drawCard(game: GameDefinition, offset: number, focused: boolean, t: number): void {
   const x = CARD_MARGIN + offset * STRIDE;
@@ -113,6 +127,8 @@ function main(): void {
   /** Eased position of the track, in card units. */
   let slide = 0;
   let elapsed = 0;
+  /** Controls modal for the selected game; swallows browsing while open. */
+  let controlsOpen = false;
 
   function selected(): number {
     return ((virtualIndex % count) + count) % count;
@@ -131,6 +147,25 @@ function main(): void {
     elapsed += dt;
 
     for (let p = 0; p < MAX_PLAYERS; p++) {
+      if (controlsOpen) {
+        // A/Start still launches, so "read the controls, then play" is one
+        // press rather than a close-then-confirm.
+        if (input.pressed(p, "a") || input.pressed(p, "start")) {
+          const game = GAMES[selected()];
+          if (game) goTo(game.id);
+        } else if (input.pressed(p, "b") || input.pressed(p, "y") || input.pressed(p, "back")) {
+          controlsOpen = false;
+          break;
+        }
+        // No browsing behind the modal: the card under it must not change.
+        continue;
+      }
+      // `break` so the press that opened the modal is not also read as the
+      // press that closes it.
+      if (input.pressed(p, "y")) {
+        controlsOpen = true;
+        break;
+      }
       // Up/down are accepted as well: on a d-pad people try both, and there
       // is nothing else for them to mean here.
       if (input.repeated(p, "right") || input.repeated(p, "down")) virtualIndex++;
@@ -225,15 +260,16 @@ function main(): void {
       x: DESIGN_WIDTH - 5,
       y: DESIGN_HEIGHT - FOOTER_H + 1,
       align: "right",
-      hints: [
-        { button: "left" },
-        { button: "right" },
-        { text: "BROWSE" },
-        { gap: 6 },
-        { button: "a" },
-        { text: "PLAY" },
-      ],
+      hints: FOOTER_HINTS,
     });
+
+    // --- controls modal, over the settled card ---
+    if (controlsOpen) {
+      const game = GAMES[active];
+      if (game) {
+        drawControlsModal({ title: game.title, rows: game.controls, accent: C[game.accent] });
+      }
+    }
 
     // Clip the cards that slid past the design box.
     drawLetterboxBars();

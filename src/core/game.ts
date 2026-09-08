@@ -1,4 +1,5 @@
 import type { PaletteKey } from "./config";
+import type { ControlRow } from "./controls";
 
 /**
  * What the menu needs to know about a game, and how the game gets wired in.
@@ -15,6 +16,15 @@ export interface GameDefinition {
   /** Short player-count blurb, e.g. "2P VERSUS". */
   readonly players: string;
   readonly accent: PaletteKey;
+  /**
+   * What the buttons do in this game, for the menu's controls modal — one row
+   * per action, most-used first. Required rather than optional: a player at
+   * the cabinet has nowhere else to look this up.
+   *
+   * Only the game's own actions. "Hold Back to quit" is on every in-game
+   * scene, so the modal adds that line itself.
+   */
+  readonly controls: readonly ControlRow[];
   /** Define the game's scene(s). Called once at boot. */
   register(): void;
   /**

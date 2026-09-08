@@ -606,6 +606,10 @@ export const snakeDuelGame: GameDefinition = {
   tagline: "Best of 5. Cut them off or eat more.",
   players: "2P VERSUS",
   accent: "good",
+  controls: [
+    { buttons: ["up", "down", "left", "right"], label: "TURN" },
+    { buttons: ["a", "start"], label: "REMATCH" },
+  ],
   drawPreview,
   drawScaleSample,
   register(): void {

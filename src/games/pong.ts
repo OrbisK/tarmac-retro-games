@@ -481,6 +481,10 @@ export const pongGame: GameDefinition = {
   tagline: "First to 5. Edge the ball for spin.",
   players: "2P VERSUS",
   accent: "p1",
+  controls: [
+    { buttons: ["up", "down"], label: "MOVE PADDLE" },
+    { buttons: ["a", "start"], label: "REMATCH" },
+  ],
   drawPreview,
   drawScaleSample,
   register(): void {
