@@ -437,7 +437,9 @@ function drawScaleSample(x: number, y: number, w: number, h: number): void {
   const paddleH = scaleUnits(PADDLE_H_BASE);
   const ballSize = scaleUnits(BALL_SIZE_BASE);
 
-  const captionY = y + h - FONT_SMALL;
+  // Two caption lines: one panel per game means the box is narrow enough that
+  // a single line would run past its edge once a third game joins the list.
+  const captionY = y + h - FONT_SMALL * 2 - 2;
   const midY = (y + captionY) / 2;
 
   // A few dashes rather than `drawDottedColumn`, which spans the whole box.
@@ -466,9 +468,17 @@ function drawScaleSample(x: number, y: number, w: number, h: number): void {
     color: C.white,
   });
   drawLabel({
-    text: `BALL ${ballSize}  PADDLE ${paddleW}x${paddleH}`,
+    text: `BALL ${ballSize}`,
     x: x + w / 2,
     y: captionY,
+    size: FONT_SMALL,
+    color: C.textDim,
+    anchor: "center",
+  });
+  drawLabel({
+    text: `PADDLE ${paddleW}x${paddleH}`,
+    x: x + w / 2,
+    y: captionY + FONT_SMALL + 2,
     size: FONT_SMALL,
     color: C.textDim,
     anchor: "center",

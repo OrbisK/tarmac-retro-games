@@ -534,7 +534,8 @@ function drawScaleSample(x: number, y: number, w: number, h: number): void {
   const inset = scaleUnits(1);
   const countdownSize = scaleUnits(FONT_HUGE);
 
-  const captionY = y + h - FONT_SMALL;
+  // Two caption lines: with a panel per game the box is too narrow for one.
+  const captionY = y + h - FONT_SMALL * 2 - 2;
   // Left: as much of a real board as the box holds. Right: the countdown.
   const gridW = Math.max(cellSize, w * 0.55);
   const sampleCols = Math.max(1, Math.floor(gridW / cellSize));
@@ -591,9 +592,17 @@ function drawScaleSample(x: number, y: number, w: number, h: number): void {
     anchor: "center",
   });
   drawLabel({
-    text: `CELL ${cellSize}  GRID ${boardCols(cellSize)}x${boardRows(cellSize)}`,
+    text: `CELL ${cellSize}`,
     x: x + w / 2,
     y: captionY,
+    size: FONT_SMALL,
+    color: C.textDim,
+    anchor: "center",
+  });
+  drawLabel({
+    text: `GRID ${boardCols(cellSize)}x${boardRows(cellSize)}`,
+    x: x + w / 2,
+    y: captionY + FONT_SMALL + 2,
     size: FONT_SMALL,
     color: C.textDim,
     anchor: "center",

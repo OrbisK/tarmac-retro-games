@@ -36,6 +36,10 @@ export const MAX_PLAYERS = 2;
  *   text 16:1   good/btnGreen 13.5:1   accent/btnYellow 13.4:1
  *   p1 11.4:1   textDim 9.3:1   btnBlue 8.9:1   btnRed 7.0:1
  *   p2/bad 6.5:1   dim 4.3:1 (borders only)
+ *
+ * Tetromino faces, same test:
+ *   tetO 13.5:1   tetS 13.5:1   tetI 12.5:1   tetL 8.3:1
+ *   tetT 8.1:1   tetJ 7.2:1   tetZ 7.0:1
  */
 export const PALETTE = {
   bg: "#0b0b16",
@@ -57,6 +61,20 @@ export const PALETTE = {
   btnRed: "#ff6b6b",
   btnYellow: "#ffd23f",
   btnGreen: "#6ef08a",
+  // The seven tetromino faces. Their own entries rather than borrowed
+  // p1/accent/good ones: a falling piece is not a player or a state, and a
+  // stack has to stay separable hue by hue at a 10-unit block, so these were
+  // picked as a set — every pair is far enough apart in Lab that the closest
+  // (tetT/tetJ, purple next to blue) still reads as two colours across a room.
+  // Garbage rows use `textDim`: the one neutral in the stack, and further from
+  // every face than any face is from another.
+  tetI: "#4fe3e3",
+  tetO: "#ffd23f",
+  tetT: "#c98cff",
+  tetS: "#6ef08a",
+  tetZ: "#ff6b6b",
+  tetJ: "#6d9aff",
+  tetL: "#ff8a2b",
 } as const;
 
 export type PaletteKey = keyof typeof PALETTE;

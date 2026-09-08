@@ -160,6 +160,7 @@ src/
     registry.ts        the menu's game list
     pong.ts
     snakeDuel.ts
+    tetrisDuel.ts
   scenes/
     menu.ts
     inputTest.ts       live raw button/axis readout
@@ -231,10 +232,18 @@ scale-sensitive grow, so raising the scale trades board area for chunk:
 | Pong ball | 4 | 8 |
 | Pong paddle | 4x30 | 8x60 |
 | Snake cell | 8 (40x28 board) | 16 (20x14 board) |
+| Tetris next-piece cell | 5 | 10 |
 | Countdown text | 28 | 56 |
 
 Steps are discrete because at this resolution a factor of 1.07 buys nothing
 anyone can see, and Snake's board has to land on a whole number of cells.
+
+Tetris is the case where the answer is *nothing on the field*: 10x20 at a
+10-unit cell is the game — spawn columns, kicks and every stacking decision
+are stated in those dimensions, and two wells plus their side panels is
+exactly what 320 units holds. So the setting drives what is read rather than
+played, the next-piece preview and the countdown, and its sample says
+`WELL CELL 10` underneath at every step.
 
 **For game code:** keep tuning the *baseline* numbers, and draw with
 `scaleUnits(BASE)` from `core/settings.ts` for the handful that should follow
@@ -291,9 +300,10 @@ removes all root children. Two consequences:
 - For transient effects use `makePool()` rather than spawning objects. Its
   capacity is fixed, so a runaway spawn rate degrades visually instead of
   eating memory (see the hit sparks in `pong.ts`).
-- For anything numerous and uniform — grid cells, snake segments — keep state
-  in preallocated typed arrays and paint it in one `onDraw`, instead of one
-  game object per cell (see `snakeDuel.ts`).
+- For anything numerous and uniform — grid cells, snake segments, a Tetris
+  well — keep state in preallocated typed arrays and paint it in one
+  `onDraw`, instead of one game object per cell (see `snakeDuel.ts`,
+  `tetrisDuel.ts`).
 
 ## Menu
 
@@ -345,6 +355,10 @@ window sizes added ~2 MB of JS heap, which came back on returning to the
 original size — and atlas *textures* live in GPU memory, which
 `performance.memory` cannot see. A fixed display only ever uses one size, so
 this affects development, not the cabinet.
+
+Re-measured when Tetris Duel was added: 50 menu/game transitions left `obj` on
+5 (peak 6) and `cln` on 0, with the post-GC heap lower at the end than at the
+start.
 
 ## Input notes
 
