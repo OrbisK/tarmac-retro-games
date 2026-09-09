@@ -38,6 +38,29 @@ layout margins, the menu and all chrome are unaffected.
 - A game with scale-sensitive elements should implement `drawScaleSample` so
   the options screen can show it.
 
+## Idle and attract
+
+Nobody stays at the cabinet, so nothing stays put: a screen with no input
+returns to the menu, and the menu browses itself.
+
+- **The scene wrapper is the only gate.** `defineScene` installs the bail-out
+  on every scene except the menu; games and operator screens do not check, the
+  same way they do not check unlocks. Do not add a second one.
+- **Activity is defined once**, in `input.ts`, which already knows what every
+  player did this frame. Edges either way count, a hold counts for its first
+  `STUCK_HOLD_SECONDS` only — a jammed button must not pin the cabinet inside
+  a game — and any key event counts even unbound, because the setup screens
+  exist for inputs that are not bound yet. Feed the clock there, not from a
+  scene.
+- **The length is an operator setting** (`IDLE_RETURN_STEPS` in
+  `settings.ts`), including `OFF`, and unlike the game scale it is read **per
+  frame**: nothing is sized from it, and a change has to land while the
+  options screen is still up. The attract cadence is not configurable and
+  keeps running with the timeout off.
+- Warning strings are prebuilt per whole second, and the timeout labels once
+  per step, because both are drawn every frame — format at the definition, not
+  in `onDraw`.
+
 ## Timed unlocks
 
 A game can be gated behind a release time (`core/unlocks.ts`, options screen).

@@ -1,5 +1,6 @@
 import { DESIGN_HEIGHT, MAX_PLAYERS } from "./config";
 import { k } from "./k";
+import { idleSeconds } from "./idle";
 import { BUTTONS, input } from "./input";
 import { pendingCleanupCount } from "./lifecycle";
 import { C, drawLabel, drawPanel, FONT_SMALL, measureLabel } from "./ui";
@@ -117,7 +118,9 @@ export function installDebugHud(): void {
         lines.push(`fps ${k.debug.fps()} dr ${k.debug.drawCalls()}`);
         lines.push(`obj ${k.debug.numObjects()} pk ${peakObjects}`);
         lines.push(`scn ${sceneSwitches} cln ${pendingCleanupCount()}`);
-        lines.push(`pad ${input.padCount()} ${formatUptime()}`);
+        // `idle` is the one to watch when a game bails out on its own.
+        lines.push(`pad ${input.padCount()} idle ${Math.floor(idleSeconds())}`);
+        lines.push(`up ${formatUptime()}`);
 
         const mb = heapMb();
         if (mb > 0) {

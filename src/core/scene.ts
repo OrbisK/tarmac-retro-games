@@ -1,4 +1,5 @@
 import { k } from "./k";
+import { installIdleReturn } from "./idle";
 import { input } from "./input";
 import { installDebugHud, noteSceneEntered } from "./debugHud";
 import { runCleanups } from "./lifecycle";
@@ -19,6 +20,10 @@ import { updateViewport } from "./viewport";
  * design-unit -> pixel mapping is current before anything reads it) and
  * painting the letterboxed play area. Root draw events run before children, so
  * registering the backdrop before the scene body puts it underneath.
+ *
+ * And it owns the idle bail-out, for the same reason the menu owns the unlock
+ * check: one gate that cannot be forgotten. Every scene it defines except the
+ * menu returns to the menu after the operator's idle timeout without input.
  */
 
 /**
@@ -51,6 +56,11 @@ export function defineScene<Args extends unknown[]>(
     k.onSceneLeave(() => runCleanups());
 
     body(...args);
+
+    // Every screen but the menu: a game, or an operator screen, left with
+    // nobody at the cabinet goes back to the carousel. The menu is exempt
+    // because it has nowhere better to go — it starts attracting instead.
+    if (name !== MENU_SCENE) installIdleReturn(goToMenu);
 
     installDebugHud();
   });

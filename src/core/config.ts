@@ -81,3 +81,25 @@ export type PaletteKey = keyof typeof PALETTE;
 
 /** Seconds the Back button must be held to bail out of a game. */
 export const QUIT_HOLD_SECONDS = 0.7;
+
+/**
+ * Idle behaviour: what the cabinet does when nobody is touching it.
+ *
+ * An event cabinet is left mid-match constantly — a round ends, the players
+ * walk off, and the next person finds a finished game they have no reason to
+ * recognise. So a scene left without input drops back to the menu, and the
+ * menu itself starts browsing on its own, which is the only thing on the
+ * machine that advertises what it holds.
+ *
+ * The attract delay is much shorter than the return: a menu nobody is driving
+ * costs nothing to animate, while a game cut short is someone's match. That
+ * is also why the return is the one an operator can change or switch off
+ * (`IDLE_RETURN_STEPS` in `core/settings.ts`) and these are not — a wrong
+ * attract cadence costs nobody anything.
+ */
+/** How long the "menu in N" warning is up before the return. */
+export const IDLE_WARNING_SECONDS = 6;
+/** Idle time on the menu before it starts cycling cards by itself. */
+export const IDLE_ATTRACT_SECONDS = 12;
+/** How long each card is held during that cycle. */
+export const ATTRACT_STEP_SECONDS = 5;

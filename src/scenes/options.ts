@@ -9,7 +9,11 @@ import {
   GAME_SCALE_STEPS,
   gameScale,
   gameScaleIndex,
+  IDLE_RETURN_STEPS,
+  idleReturnIndex,
+  idleReturnText,
   nudgeGameScale,
+  nudgeIdleReturn,
   resetSettings,
   settingsAreCustomised,
 } from "../core/settings";
@@ -35,8 +39,8 @@ import {
 import { GAMES } from "../games/registry";
 
 /**
- * Options: the cabinet-side settings — game scale, and a release time per
- * game.
+ * Options: the cabinet-side settings — game scale, the idle timeout, and a
+ * release time per game.
  *
  * Navigated with **directions only**, like the input test and button setup it
  * sits next to — this screen is reachable on a pad whose face buttons report
@@ -53,6 +57,9 @@ import { GAMES } from "../games/registry";
 interface ScaleRow {
   readonly kind: "scale";
 }
+interface IdleRow {
+  readonly kind: "idle";
+}
 interface UnlockRow {
   readonly kind: "unlock";
   readonly game: GameDefinition;
@@ -60,7 +67,7 @@ interface UnlockRow {
 interface ResetRow {
   readonly kind: "reset";
 }
-type Row = ScaleRow | UnlockRow | ResetRow;
+type Row = ScaleRow | IdleRow | UnlockRow | ResetRow;
 
 /**
  * Built once at module load, not per frame: the registry is fixed for the life
@@ -68,6 +75,7 @@ type Row = ScaleRow | UnlockRow | ResetRow;
  */
 const ROWS: readonly Row[] = [
   { kind: "scale" },
+  { kind: "idle" },
   ...GAMES.map((game): UnlockRow => ({ kind: "unlock", game })),
   { kind: "reset" },
 ];
@@ -111,6 +119,20 @@ const SCALE_HINTS = [
   { button: "left" },
   { button: "right" },
   { text: "SCALE" },
+  { gap: 6 },
+  { button: "l" },
+  { text: "INPUT" },
+] as const satisfies readonly Hint[];
+
+/** Same shape as the scale row, so the same two directions change it. */
+const IDLE_HINTS = [
+  { button: "up" },
+  { button: "down" },
+  { text: "PICK" },
+  { gap: 6 },
+  { button: "left" },
+  { button: "right" },
+  { text: "TIMEOUT" },
   { gap: 6 },
   { button: "l" },
   { text: "INPUT" },
@@ -169,6 +191,11 @@ function scaleText(): string {
   return `${gameScale()}x`;
 }
 
+/** "IDLE 1M" / "IDLE TIMEOUT OFF" for the status line under the rows. */
+function idleStatus(): string {
+  return idleReturnIndex() > 0 ? `IDLE ${idleReturnText()}` : "IDLE TIMEOUT OFF";
+}
+
 function drawScaleRow(y: number): void {
   drawLabel({ text: "GAME SCALE", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
   drawLabel({
@@ -183,6 +210,40 @@ function drawScaleRow(y: number): void {
     const on = i <= selected;
     drawBox({
       x: PIPS_X + i * PIP_STRIDE,
+      y: y + 1,
+      w: PIP_SIZE,
+      h: PIP_SIZE,
+      color: on ? C.accent : C.bg,
+      outline: on ? C.accent : C.dim,
+    });
+  }
+}
+
+/**
+ * The idle timeout: how long a game sits untouched before the cabinet takes
+ * itself back to the menu, or `OFF`.
+ *
+ * Same ladder-of-pips shape as the scale row above it, with one difference:
+ * `OFF` lights none. A lit pip means "this much timeout", so the shortest
+ * setting has to be one pip and no-timeout has to be zero — a lit pip on
+ * `OFF` would read as some.
+ */
+function drawIdleRow(y: number): void {
+  const selected = idleReturnIndex();
+  drawLabel({ text: "IDLE TIMEOUT", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
+  drawLabel({
+    text: idleReturnText(),
+    x: VALUE_X,
+    y,
+    size: FONT_SMALL,
+    // Off is a state worth spotting from the doorway: this is the one setting
+    // that stops the cabinet putting itself back on the menu.
+    color: selected > 0 ? C.accent : C.bad,
+  });
+  for (let i = 1; i < IDLE_RETURN_STEPS.length; i++) {
+    const on = i <= selected;
+    drawBox({
+      x: PIPS_X + (i - 1) * PIP_STRIDE,
       y: y + 1,
       w: PIP_SIZE,
       h: PIP_SIZE,
@@ -342,6 +403,11 @@ function main(): void {
         // would run off the end before anyone let go.
         if (input.anyPressed("left") && nudgeGameScale(-1)) say(`SCALE ${scaleText()}`);
         if (input.anyPressed("right") && nudgeGameScale(1)) say(`SCALE ${scaleText()}`);
+      } else if (current.kind === "idle") {
+        // Edge-triggered like the scale row, and for the same reason: eight
+        // steps is a short ladder to run off the end of on a held direction.
+        if (input.anyPressed("left") && nudgeIdleReturn(-1)) say(idleStatus());
+        if (input.anyPressed("right") && nudgeIdleReturn(1)) say(idleStatus());
       } else if (current.kind === "unlock") {
         if (input.anyPressed("right")) field = 0;
       } else if (input.anyPressed("right")) {
@@ -390,6 +456,7 @@ function main(): void {
         });
       }
       if (row.kind === "scale") drawScaleRow(y);
+      else if (row.kind === "idle") drawIdleRow(y);
       else if (row.kind === "unlock") drawUnlockRow(row.game, y, selected ? field : -1, now);
       else drawResetRow(y);
     }
@@ -422,9 +489,11 @@ function main(): void {
         ? UNLOCK_EDIT_HINTS
         : ROWS[rowIndex].kind === "scale"
           ? SCALE_HINTS
-          : ROWS[rowIndex].kind === "unlock"
-            ? UNLOCK_HINTS
-            : RESET_HINTS,
+          : ROWS[rowIndex].kind === "idle"
+            ? IDLE_HINTS
+            : ROWS[rowIndex].kind === "unlock"
+              ? UNLOCK_HINTS
+              : RESET_HINTS,
     });
   });
 }

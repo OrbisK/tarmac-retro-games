@@ -22,6 +22,7 @@ npm run typecheck
 | Controls modal (menu) | Y | Y | `E` | `/` |
 | Debug overlay | hold Select + tap Start | " | `F3` | `F3` |
 | Options / input test | see calibration below | " | `F5` / `F4` | `F5` / `F4` |
+| Cancel the idle timeout | anything at all | " | any key | any key |
 
 Either player can drive the menu. Pads are assigned to slots by their browser
 gamepad index, lowest first.
@@ -82,18 +83,25 @@ buttons report the wrong indices.
 | Key | Action |
 | --- | --- |
 | Up / Down | pick a row |
-| Left / Right | change the game scale |
+| Left / Right | change the game scale, or the idle timeout |
 | Right | enter an unlock row, or restore defaults on the reset row |
 | L | back to the input test |
 | hold Back | menu |
 
 **Game scale** is the first row — see below. Each game draws its own sample
 underneath at true size, so the effect is visible without launching a match.
-Settings live in `localStorage` under `tarmac.settings.v1`.
 
-Then one row per game: its **unlock time**, below. The reset row restores both
-— the scale, and every unlock time — and says `CHANGED` whenever either is off
-its default.
+**Idle timeout** is the second: how long a screen sits untouched before the
+cabinet takes itself back to the menu — `OFF`, `30S`, `45S`, `1M` (the
+default), `1M 30S`, `2M`, `3M`, `5M`. It applies immediately, including to the
+options screen you set it on, and the pips light with the length, so `OFF`
+lights none and shows red. See below.
+
+Both live in `localStorage` under `tarmac.settings.v1`.
+
+Then one row per game: its **unlock time**, below. The reset row restores all
+of it — the scale, the timeout, and every unlock time — and says `CHANGED`
+whenever any of them is off its default.
 
 ## Timed unlocks
 
@@ -134,6 +142,60 @@ id, and are read against the machine's local clock — there is nothing else to
 ask on a cabinet with no network. A game whose id is not in the registry keeps
 its stored time, so a game pulled for one event and put back does not lose it.
 
+## Idle and attract
+
+The cabinet is left mid-match constantly: a round ends, the players wander
+off, and whoever arrives next finds someone else's finished game. So nothing
+stays put.
+
+- **No input for a minute** and the current screen goes back to the menu,
+  with a `MENU IN 5 / PRESS ANY BUTTON` panel up for the last six seconds.
+  Any input at all clears it — including a *release*, so a hand resting on a
+  button is enough. The minute is the **idle timeout** on the options screen:
+  `OFF`, or 30 seconds to 5 minutes (`IDLE_RETURN_STEPS` in
+  `core/settings.ts`), read per frame so a change lands on the spot. `OFF`
+  suits a tournament on a stage, where the only thing that should ever
+  interrupt a long match is a player.
+- **The menu itself never times out.** Instead, after 12 seconds
+  (`IDLE_ATTRACT_SECONDS`) it starts browsing itself, one card every 5
+  (`ATTRACT_STEP_SECONDS`), through the same virtual index a player drives —
+  so the room sees the whole list instead of whatever was left selected. A
+  game that timed out lands on a menu whose idle clock is already past the
+  threshold, so the cycle picks up straight away. An open controls modal is
+  closed when attract starts, since the card under it is about to move.
+
+The attract numbers are fixed, in `core/config.ts` — including the six-second
+warning, which is a property of the warning and not of the wait in front of
+it. Turning the timeout `OFF` does not stop the menu attracting: attract has
+no game to interrupt.
+
+**One clock for the machine**, in `core/idle.ts`, deliberately not one per
+scene: it is the cabinet that is idle, and the timer has to survive the
+transition it causes. **One gate**, too — `defineScene` installs the bail-out
+on every scene except the menu, the same way the menu is the only place an
+unlock is checked. A game that had to remember the call would be a game that
+one day forgets it and strands the cabinet in a finished match.
+
+What counts as activity is decided in `core/input.ts`, which is the only place
+that already knows what every player did this frame:
+
+- a press or a release of any bound button, on either player, pad or keyboard;
+- **any** key event, bound or not, because on the setup screens the key being
+  pressed is often the one that is not bound to anything yet;
+- any raw pad button or axis that binding capture sees move, for the same
+  reason — those presses may resolve to nothing at all on a miscalibrated pad,
+  and that is the screen you fix it on;
+- a button being *held*, but only for its first 30 seconds
+  (`STUCK_HOLD_SECONDS`). Holding is playing — a paddle pinned at the top of
+  the court is someone playing badly — but a jammed switch, a coin resting on
+  a button or a taped-over stick would otherwise keep the machine inside a
+  game for the rest of the day. A real hand always releases, and the release
+  clears the clock.
+
+`idle` is on the F3 overlay, next to the pad count, which is the quickest way
+to see whether something on the cabinet is reporting input nobody is giving
+it.
+
 ## Layout
 
 ```
@@ -148,12 +210,13 @@ src/
     ui.ts              palette Colors and pixel-snapped draw helpers
     pool.ts            fixed-capacity object pool for transient effects
     quit.ts            hold-to-quit-to-menu shell for in-game scenes
+    idle.ts            idle clock, the timeout back to the menu
     game.ts            GameDefinition — the contract a game implements
     debugHud.ts        F3 overlay: fps, object count, heap trend, live input
     buttons.ts         the logical button vocabulary games code against
     controls.ts        the per-game controls modal shown from the menu
     bindings.ts        per-controller button bindings + localStorage
-    settings.ts        game scale + localStorage
+    settings.ts        game scale, idle timeout + localStorage
     unlocks.ts         per-game release times + countdown strings
     cheat.ts           hidden button-sequence matcher
   games/

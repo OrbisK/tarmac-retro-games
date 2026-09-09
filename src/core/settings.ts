@@ -4,6 +4,11 @@
  * Persisted the same way as `bindings.ts` — localStorage, with every access
  * guarded, because a cabinet whose storage is unavailable has to boot on
  * defaults rather than throw on the way to the menu.
+ *
+ * Everything here is a **discrete ladder**, not a free value: the options
+ * screen is driven with four directions and no keyboard, so a setting has to
+ * be reachable in a few presses, and every step has to be one somebody can
+ * actually tell apart.
  */
 
 const STORAGE_KEY = "tarmac.settings.v1";
@@ -35,16 +40,35 @@ export const GAME_SCALE_MIN = GAME_SCALE_STEPS[0];
  * the ball and the countdowns that go first from a couple of metres away. 1x
  * is still one step to the left for anyone who wants the original proportions.
  */
-const DEFAULT_INDEX = 1;
+const DEFAULT_SCALE_INDEX = 1;
 
-let scaleIndex = DEFAULT_INDEX;
+/**
+ * Seconds of no input before a scene drops back to the menu. `0` is off.
+ *
+ * The ladder is coarse on purpose and stops at five minutes: past that a
+ * cabinet is not "waiting for a player who stepped away", it is showing a
+ * finished match to an empty room, and the operator who genuinely wants that
+ * wants `OFF`.
+ *
+ * `OFF` is a real setting rather than a hidden one because the timeout is the
+ * only thing on the machine that can interrupt a game nobody asked it to —
+ * a tournament running long matches on a stage wants it gone. It does not
+ * touch the menu's attract cycle, which has no game to interrupt.
+ */
+export const IDLE_RETURN_STEPS = [0, 30, 45, 60, 90, 120, 180, 300] as const;
+
+/** One minute: long enough to think, short enough that the next player waits. */
+const DEFAULT_IDLE_INDEX = 3;
+
+let scaleIndex = DEFAULT_SCALE_INDEX;
+let idleIndex = DEFAULT_IDLE_INDEX;
 
 /** Snap an arbitrary stored number to the nearest offered step. */
-function nearestIndex(value: number): number {
-  let best = DEFAULT_INDEX;
+function nearestIndex(steps: readonly number[], value: number, fallback: number): number {
+  let best = fallback;
   let bestGap = Infinity;
-  for (let i = 0; i < GAME_SCALE_STEPS.length; i++) {
-    const gap = Math.abs(GAME_SCALE_STEPS[i] - value);
+  for (let i = 0; i < steps.length; i++) {
+    const gap = Math.abs(steps[i] - value);
     if (gap < bestGap) {
       bestGap = gap;
       best = i;
@@ -64,9 +88,15 @@ function load(): void {
   if (!raw) return;
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const stored = parsed.gameScale;
-    if (typeof stored === "number" && Number.isFinite(stored)) {
-      scaleIndex = nearestIndex(stored);
+    const scale = parsed.gameScale;
+    if (typeof scale === "number" && Number.isFinite(scale)) {
+      scaleIndex = nearestIndex(GAME_SCALE_STEPS, scale, DEFAULT_SCALE_INDEX);
+    }
+    // Stored in seconds rather than as an index, so re-tuning the ladder does
+    // not silently change what every cabinet in the field is set to.
+    const idle = parsed.idleReturn;
+    if (typeof idle === "number" && Number.isFinite(idle)) {
+      idleIndex = nearestIndex(IDLE_RETURN_STEPS, idle, DEFAULT_IDLE_INDEX);
     }
   } catch (err) {
     console.warn("[settings] could not read settings, using defaults:", err);
@@ -77,7 +107,10 @@ load();
 
 function persist(): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 1, gameScale: gameScale() }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ v: 1, gameScale: gameScale(), idleReturn: idleReturnSeconds() }),
+    );
   } catch (err) {
     console.warn("[settings] could not save settings:", err);
   }
@@ -106,12 +139,60 @@ export function nudgeGameScale(delta: number): boolean {
 }
 
 export function settingsAreCustomised(): boolean {
-  return scaleIndex !== DEFAULT_INDEX;
+  return scaleIndex !== DEFAULT_SCALE_INDEX || idleIndex !== DEFAULT_IDLE_INDEX;
 }
 
 export function resetSettings(): void {
-  scaleIndex = DEFAULT_INDEX;
+  scaleIndex = DEFAULT_SCALE_INDEX;
+  idleIndex = DEFAULT_IDLE_INDEX;
   persist();
+}
+
+// --- idle timeout ---------------------------------------------------------
+
+/**
+ * "OFF", "45S", "1M", "1M 30S" — built once per step at module load.
+ *
+ * The options screen draws the current one every frame, and formatting there
+ * would allocate a string per frame for a value that changes on a keypress.
+ */
+const IDLE_RETURN_LABELS: readonly string[] = IDLE_RETURN_STEPS.map((seconds) => {
+  if (seconds === 0) return "OFF";
+  if (seconds < 60) return `${seconds}S`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest === 0 ? `${minutes}M` : `${minutes}M ${rest}S`;
+});
+
+/**
+ * Seconds of idle before a scene returns to the menu; 0 when switched off.
+ *
+ * Read **per frame**, unlike `gameScale()`: nothing is sized or allocated
+ * from it, so a change on the options screen can take effect on the spot —
+ * including on the options screen itself, which is the only place the
+ * operator can watch it happen.
+ */
+export function idleReturnSeconds(): number {
+  return IDLE_RETURN_STEPS[idleIndex];
+}
+
+/** Which step is selected, for the options screen's pip ladder. */
+export function idleReturnIndex(): number {
+  return idleIndex;
+}
+
+/** The current setting as the options screen shows it. */
+export function idleReturnText(): string {
+  return IDLE_RETURN_LABELS[idleIndex] ?? "";
+}
+
+/** Step the idle timeout, clamped at both ends. Returns whether it moved. */
+export function nudgeIdleReturn(delta: number): boolean {
+  const next = Math.max(0, Math.min(IDLE_RETURN_STEPS.length - 1, idleIndex + delta));
+  if (next === idleIndex) return false;
+  idleIndex = next;
+  persist();
+  return true;
 }
 
 /**

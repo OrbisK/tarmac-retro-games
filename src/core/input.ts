@@ -1,6 +1,7 @@
 import { type BindingSource, faceColorOf, keyBindings, padBindings } from "./bindings";
 import { BUTTON_COUNT, BUTTON_INDEX, BUTTONS, type Button, type FaceColor } from "./buttons";
 import { MAX_PLAYERS } from "./config";
+import { advanceIdle, noteActivity } from "./idle";
 import { k } from "./k";
 
 export { BUTTONS } from "./buttons";
@@ -28,6 +29,9 @@ export type { Button } from "./buttons";
  *    returning: all state lives in preallocated typed arrays.
  *  - **Edge state survives scene changes** on purpose: a button still held
  *    from the menu will not read as a fresh press inside the game it started.
+ *  - **This module feeds the idle clock** (`core/idle.ts`), because it is the
+ *    one place that already knows what every player did this frame. Activity
+ *    is an edge either way plus a bounded hold — see `STUCK_HOLD_SECONDS`.
  */
 
 const N = BUTTON_COUNT;
@@ -76,6 +80,9 @@ let capturedKey: string | null = null;
 
 window.addEventListener("keydown", (ev) => {
   const name = keyName(ev);
+  // Every key, not only bound ones: on the setup screens the key someone is
+  // pressing is often the one that is not bound to anything yet.
+  noteActivity();
   if (SWALLOW.has(name)) ev.preventDefault();
   if (!heldKeys.has(name)) capturedKey = name;
   heldKeys.add(name);
@@ -101,6 +108,16 @@ const REPEAT_RATE = 0.11;
  * menu the moment someone plugs a controller in.
  */
 const PAD_SETTLE_FRAMES = 3;
+/**
+ * How long a held button keeps counting as activity for the idle clock.
+ *
+ * Holding is input — a paddle pinned against the top of the court is someone
+ * playing — but it cannot count forever, or a jammed switch, a coin resting on
+ * a button or a stick taped over would keep the cabinet inside a game for the
+ * rest of the day. Longer than any deliberate hold in these games, and a
+ * release is itself activity, so a real hand always clears the clock.
+ */
+const STUCK_HOLD_SECONDS = 30;
 
 class PlayerState {
   readonly down = new Uint8Array(N);
@@ -196,6 +213,8 @@ function assignPads(): void {
 function poll(): void {
   assignPads();
   const dt = k.dt();
+  /** Anything at all from any player this frame — feeds the idle clock. */
+  let active = false;
 
   for (let p = 0; p < MAX_PLAYERS; p++) {
     const st = players[p];
@@ -245,6 +264,7 @@ function poll(): void {
         st.nextRepeat[i] = REPEAT_DELAY;
         st.repeat[i] = 1;
         lastActive = p;
+        active = true;
       } else if (isDown) {
         st.held[i] += dt;
         if (st.held[i] >= st.nextRepeat[i]) {
@@ -253,13 +273,21 @@ function poll(): void {
         } else {
           st.repeat[i] = 0;
         }
+        if (st.held[i] < STUCK_HOLD_SECONDS) active = true;
       } else {
+        // A release counts too: it is the other half of every press, and it is
+        // what lets someone who was leaning on a button clear the idle clock.
+        if (wasDown) active = true;
         st.held[i] = 0;
         st.nextRepeat[i] = 0;
         st.repeat[i] = 0;
       }
     }
   }
+
+  // One clock for the machine, so it survives the scene change it causes.
+  if (active) noteActivity();
+  else advanceIdle(dt);
 }
 
 function state(player: number): PlayerState | null {
@@ -304,15 +332,20 @@ function pollPadCapture(): BindingSource | null {
   const pad = assigned[captureSlot];
   if (!pad) return null;
 
+  // Raw indices, so these presses may be bound to nothing yet and invisible
+  // to the idle clock — which would time out the very screen that exists to
+  // fix a pad reporting the wrong ones.
   for (let i = 0; i < Math.min(pad.buttons.length, MAX_CAPTURE_BUTTONS); i++) {
     const now = buttonValue(pad, i);
     if (now > TRIGGER_THRESHOLD && captureButtons[i] <= TRIGGER_THRESHOLD) {
+      noteActivity();
       return { t: "b", i };
     }
   }
   for (let i = 0; i < Math.min(pad.axes.length, MAX_CAPTURE_AXES); i++) {
     const travel = axisValue(pad, i) - captureAxes[i];
     if (Math.abs(travel) >= CAPTURE_AXIS_TRAVEL) {
+      noteActivity();
       return { t: "a", i, d: travel > 0 ? 1 : -1 };
     }
   }

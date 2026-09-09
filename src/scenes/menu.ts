@@ -1,5 +1,12 @@
-import { DESIGN_HEIGHT, DESIGN_WIDTH, MAX_PLAYERS } from "../core/config";
+import {
+  ATTRACT_STEP_SECONDS,
+  DESIGN_HEIGHT,
+  DESIGN_WIDTH,
+  IDLE_ATTRACT_SECONDS,
+  MAX_PLAYERS,
+} from "../core/config";
 import type { GameDefinition } from "../core/game";
+import { idleSeconds } from "../core/idle";
 import { input } from "../core/input";
 import { k } from "../core/k";
 import { defineScene, goTo, INPUT_TEST_SCENE, MENU_SCENE, OPTIONS_SCENE } from "../core/scene";
@@ -37,6 +44,13 @@ import { GAMES } from "../games/registry";
  * Everything is drawn in one `onDraw` rather than built from objects: the
  * selection moves constantly, and rebuilding a list of game objects on every
  * input is exactly the churn to avoid on a machine that stays on for hours.
+ *
+ * Left alone for `IDLE_ATTRACT_SECONDS` it browses itself, one card every
+ * `ATTRACT_STEP_SECONDS`, using the same virtual index as a player would — so
+ * the cabinet shows its whole list to the room instead of holding on whatever
+ * the last person happened to leave selected. This is also where a game that
+ * timed out lands, with the idle clock already past the threshold, so the
+ * cycle picks up immediately rather than after another wait.
  *
  * A game with an unlock time that has not passed yet (`core/unlocks.ts`) is
  * still on the carousel, but as `???` over a dimmed preview with the
@@ -239,6 +253,8 @@ function main(): void {
   let controlsOpen = false;
   /** Seconds left of the refusal after A/Y on a locked card. */
   let lockedFlash = 0;
+  /** Seconds until the attract cycle moves on. Only counts down while idle. */
+  let attractTimer = ATTRACT_STEP_SECONDS;
 
   function selected(): number {
     return ((virtualIndex % count) + count) % count;
@@ -304,6 +320,24 @@ function main(): void {
       if (input.repeated(p, "right") || input.repeated(p, "down")) virtualIndex++;
       if (input.repeated(p, "left") || input.repeated(p, "up")) virtualIndex--;
       if (input.pressed(p, "a") || input.pressed(p, "start")) launchSelected();
+    }
+
+    // --- attract: browse on its own once nobody has touched anything ---
+    // Nothing to attract with one game, and stepping a single-card carousel
+    // would slide to the same card over and over.
+    if (count > 1 && idleSeconds() >= IDLE_ATTRACT_SECONDS) {
+      // The modal names one game and launches it from A, so it must not be
+      // left open over a card that is about to change underneath it.
+      controlsOpen = false;
+      attractTimer -= dt;
+      if (attractTimer <= 0) {
+        attractTimer = ATTRACT_STEP_SECONDS;
+        virtualIndex++;
+      }
+    } else {
+      // Reset rather than pause, so the first attract step is a full interval
+      // after the cabinet goes quiet.
+      attractTimer = ATTRACT_STEP_SECONDS;
     }
 
     // Exponential ease, framerate independent.
