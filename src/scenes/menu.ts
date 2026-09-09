@@ -10,6 +10,7 @@ import { idleSeconds } from "../core/idle";
 import { input } from "../core/input";
 import { k } from "../core/k";
 import { syncPwa } from "../core/pwa";
+import { gameEnabled } from "../core/roster";
 import { defineScene, goTo, INPUT_TEST_SCENE, MENU_SCENE, OPTIONS_SCENE } from "../core/scene";
 import {
   C,
@@ -58,6 +59,13 @@ import { GAMES } from "../games/registry";
  * countdown under it: the card is the advert for the game, so hiding it
  * entirely would lose the thing the countdown is for. The menu is the only
  * gate — pressing A on a locked card refuses and says how long is left.
+ *
+ * A game the operator has switched **off** (`core/roster.ts`) is the opposite
+ * case and is simply not here: no card, no dot, no place in the wrap-around.
+ * There is nothing to advertise about a game that does not work and nothing
+ * to count down to, and a card that only ever refuses would just collect
+ * presses. The list is read once on entry — the options screen is the only
+ * thing that changes it, and leaving options comes back through here.
  */
 
 const HEADER_H = 15;
@@ -104,6 +112,22 @@ const LOCK_BAR = 3;
  */
 const LOCKED_PREVIEW_VEIL = 0.82;
 
+/**
+ * The notice that stands in for the carousel when the roster is empty.
+ *
+ * Only an operator can produce this state, so it is addressed to one: it says
+ * where the switch is rather than apologising to a player. Built once, like
+ * every other string drawn every frame.
+ */
+const EMPTY_LINES = [
+  "NO GAMES ENABLED",
+  "EVERY GAME ON THIS CABINET IS",
+  "SWITCHED OFF IN OPTIONS  (F5)",
+] as const;
+const EMPTY_TITLE_GAP = 8;
+const EMPTY_LINE_GAP = 4;
+const EMPTY_BLOCK_H = FONT_TITLE + EMPTY_TITLE_GAP + FONT_SMALL + EMPTY_LINE_GAP + FONT_SMALL;
+
 /** Built once: `onDraw` must not allocate. */
 const FOOTER_HINTS: readonly Hint[] = [
   { button: "left" },
@@ -141,6 +165,39 @@ function drawLockGlyph(cx: number, cy: number): void {
   drawBox({ x: cx - LOCK_BODY_W / 2, y: bodyY, w: LOCK_BODY_W, h: LOCK_BODY_H, color: C.textDim });
   // Keyhole: punched in the card fill, so the body reads as solid.
   drawBox({ x: cx - LOCK_BAR / 2, y: bodyY + 6, w: LOCK_BAR, h: LOCK_BODY_H - 11, color: C.bg });
+}
+
+/**
+ * The card area, with the empty-roster notice in it instead of a card.
+ *
+ * Outlined in `bad` rather than the accent: an empty carousel is a cabinet
+ * that cannot do the one thing it is for, and it should read that way from
+ * across the room.
+ */
+function drawEmptyRoster(): void {
+  drawPanel({ x: CARD_MARGIN, y: CARD_TOP, w: CARD_W, h: CARD_H, fill: C.bg, outline: C.bad });
+  const cx = DESIGN_WIDTH / 2;
+  let y = CARD_TOP + (CARD_H - EMPTY_BLOCK_H) / 2;
+  drawLabel({
+    text: EMPTY_LINES[0],
+    x: cx,
+    y,
+    size: FONT_TITLE,
+    color: C.bad,
+    anchor: "center",
+  });
+  y += FONT_TITLE + EMPTY_TITLE_GAP;
+  for (let i = 1; i < EMPTY_LINES.length; i++) {
+    drawLabel({
+      text: EMPTY_LINES[i],
+      x: cx,
+      y,
+      size: FONT_SMALL,
+      color: C.textDim,
+      anchor: "center",
+    });
+    y += FONT_SMALL + EMPTY_LINE_GAP;
+  }
 }
 
 function drawCard(opts: {
@@ -249,7 +306,9 @@ function main(): void {
   // why the menu owns this rather than the worker deciding for itself.
   syncPwa();
 
-  const count = GAMES.length;
+  // Read once, on entry: see the note at the top about why that is enough.
+  const games = GAMES.filter((game) => gameEnabled(game.id));
+  const count = games.length;
   /** Unbounded: the shown game is this modulo `count`, so wrapping is smooth. */
   let virtualIndex = 0;
   /** Eased position of the track, in card units. */
@@ -274,7 +333,7 @@ function main(): void {
    * two more places to forget.
    */
   function launchSelected(): void {
-    const game = GAMES[selected()];
+    const game = games[selected()];
     if (!game) return;
     if (isLocked(game.id, Date.now())) {
       lockedFlash = LOCKED_FLASH_SECONDS;
@@ -296,6 +355,11 @@ function main(): void {
     elapsed += dt;
     if (lockedFlash > 0) lockedFlash = Math.max(0, lockedFlash - dt);
 
+    // Nothing to browse, launch or attract with. The menu has no idle
+    // timeout, so the cabinet sits on the notice until somebody switches a
+    // game back on from the options screen.
+    if (count === 0) return;
+
     for (let p = 0; p < MAX_PLAYERS; p++) {
       if (controlsOpen) {
         // A/Start still launches, so "read the controls, then play" is one
@@ -314,7 +378,7 @@ function main(): void {
       if (input.pressed(p, "y")) {
         // The controls list names the game in its header and would launch it
         // from A, so a locked card refuses here too.
-        if (isLocked(GAMES[selected()]?.id ?? "", Date.now())) {
+        if (isLocked(games[selected()]?.id ?? "", Date.now())) {
           lockedFlash = LOCKED_FLASH_SECONDS;
         } else {
           controlsOpen = true;
@@ -353,12 +417,6 @@ function main(): void {
 
   k.onDraw(() => {
     const now = Date.now();
-    const active = selected();
-    const activeGame = GAMES[active];
-    const activeLocked = activeGame !== undefined && isLocked(activeGame.id, now);
-    // Square wave, so the refused card blinks rather than fading — a fade
-    // reads as an animation, a blink reads as "no".
-    const flashOn = lockedFlash > 0 && Math.floor(lockedFlash * LOCKED_FLASH_HZ * 2) % 2 === 1;
 
     // --- header ---
     drawLabel({
@@ -383,6 +441,23 @@ function main(): void {
     }
     drawRule(HEADER_H);
 
+    // --- nothing on the roster: the notice takes the whole card area ---
+    if (count === 0) {
+      drawEmptyRoster();
+      drawRule(DESIGN_HEIGHT - FOOTER_H);
+      drawLetterboxBars();
+      return;
+    }
+
+    // Below the early return: with an empty roster there is no selection for
+    // these to describe, and `selected()` divides by the card count.
+    const active = selected();
+    const activeGame = games[active];
+    const activeLocked = activeGame !== undefined && isLocked(activeGame.id, now);
+    // Square wave, so the refused card blinks rather than fading — a fade
+    // reads as an animation, a blink reads as "no".
+    const flashOn = lockedFlash > 0 && Math.floor(lockedFlash * LOCKED_FLASH_HZ * 2) % 2 === 1;
+
     // --- carousel track ---
     // Only the cards that can be on screen are drawn; at most three during a
     // slide, one when settled.
@@ -391,7 +466,7 @@ function main(): void {
       const offset = i - slide;
       if (Math.abs(offset) > 1.05) continue;
       const index = ((i % count) + count) % count;
-      const game = GAMES[index];
+      const game = games[index];
       if (!game) continue;
       const focused = Math.abs(offset) < 0.5;
       const locked = isLocked(game.id, now);
@@ -477,7 +552,7 @@ function main(): void {
 
     // --- controls modal, over the settled card ---
     if (controlsOpen) {
-      const game = GAMES[active];
+      const game = games[active];
       if (game) {
         drawControlsModal({ title: game.title, rows: game.controls, accent: C[game.accent] });
       }

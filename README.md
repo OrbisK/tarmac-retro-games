@@ -84,7 +84,7 @@ buttons report the wrong indices.
 | --- | --- |
 | Up / Down | pick a row |
 | Left / Right | change the game scale, or the idle timeout |
-| Right | enter an unlock row, or restore defaults on the reset row |
+| Right | enter a game row, or restore defaults on the reset row |
 | L | back to the input test |
 | hold Back | menu |
 
@@ -99,48 +99,86 @@ lights none and shows red. See below.
 
 Both live in `localStorage` under `tarmac.settings.v1`.
 
-Then one row per game: its **unlock time**, below. The reset row restores all
-of it — the scale, the timeout, and every unlock time — and says `CHANGED`
-whenever any of them is off its default.
+Then one row per game: whether it plays and from when, below. The reset row
+restores all of it — the scale, the timeout, every unlock time and every game
+switched back on — and says `CHANGED` whenever any of them is off its default.
 
-## Timed unlocks
+## Which games play, and when
 
-A game can be held back until a moment you set, so an event can drop games
+Each game's row on the options screen is the whole answer:
+
+```
+PONG          TIMED  9 SEP 2026 20:00                 3D 01H
+SNAKE DUEL    ON     9 SEP 2026 18:00                   OPEN
+TARMAC BRAWL  OFF    9 SEP 2026 18:00                 HIDDEN
+```
+
+Left to right: the game's **state**, a release timestamp field by field, and
+what that means right now.
+
+The state has three positions, and it is one field rather than two switches
+because there is one question being answered per game:
+
+| State | Meaning |
+| --- | --- |
+| `OFF` | not on the cabinet at all — no card, no dot, no place in the carousel |
+| `ON` | playable now (the default) |
+| `TIMED` | playable from the timestamp on the row; locked, with a countdown, until then |
+
+`OFF` is for a game that is **broken**: the controller input for it is dead,
+it crashes on the third round, whatever it is — take it off until you can fix
+it. It is deliberately not a locked card. A locked card is an advert with a
+countdown on it and something to come back for; a broken game has neither, and
+a card that only ever refuses would just collect presses all day. So it is
+gone from the carousel entirely, and the footer dots and the wrap-around count
+only the games that are actually on offer.
+
+Switch **every** game off and the menu says so, in place of the carousel:
+
+```
+        NO GAMES ENABLED
+   EVERY GAME ON THIS CABINET IS
+    SWITCHED OFF IN OPTIONS  (F5)
+```
+
+That state can only be reached from the options screen, so the notice is
+addressed to whoever made it rather than apologising to a player. The menu has
+no idle timeout, so the cabinet sits there until a game goes back on — `F5`,
+or the reset row, which puts them all back.
+
+`TIMED` holds a game back until a moment you set, so an event can drop games
 over the course of a day. Until then the menu shows the card as `???` over a
 dimmed preview with a live countdown, and refuses to launch it.
 
-Each game's row on the options screen carries the whole schedule:
-
-```
-PONG        ON   8 SEP 2026 20:00                    3D 01H
-SNAKE DUEL  OFF  8 SEP 2026 18:00                      OPEN
-```
-
-Left to right: whether the schedule is in force, the release timestamp field
-by field, and what that means right now — `OPEN`, or the countdown a player
-will see. The countdown is the check on the cabinet's clock: if it reads wrong
-here, the machine's own time is wrong. A row switched `OFF` keeps its time,
-dimmed, so a schedule can be set up before it is armed.
+The right-hand column is the consequence, not the setting: `HIDDEN`, `OPEN`,
+or the countdown a player will see. That countdown is also the check on the
+cabinet's clock — if it reads wrong here, the machine's own time is wrong. A
+row that is not `TIMED` keeps its timestamp, dimmed, so a schedule can be set
+up before it is armed, or while the game is still switched off.
 
 Editing a row, with four directions and no confirm button:
 
 | Key | Action |
 | --- | --- |
-| Right | enter the row, on the ON/OFF field |
+| Right | enter the row, on the state field |
 | Left / Right | move between fields |
 | Up / Down | change the field under the cursor |
-| Left, on ON/OFF | leave the row |
+| Left, on the state field | leave the row |
 
 Up/Down are the row picker until you enter a row and the value knob after,
 which is the only way to fit a timestamp editor into direction-only
 navigation. Values auto-repeat when held, and they carry: minute 59 stepped up
 is the next hour, day 31 the 1st of the next month. Stepping the month or the
 year clamps the day instead, so 31 MAR moved to February lands on the 28th.
+The state clamps at both ends, and stepping up out of `OFF` always lands on
+`ON` — even for a game whose schedule was armed when it was switched off.
 
-Unlock times live in `localStorage` under `tarmac.unlocks.v1`, keyed by game
-id, and are read against the machine's local clock — there is nothing else to
-ask on a cabinet with no network. A game whose id is not in the registry keeps
-its stored time, so a game pulled for one event and put back does not lose it.
+The two halves are stored separately, both keyed by game id: the games that
+are switched off in `localStorage` under `tarmac.roster.v1`, the unlock times
+under `tarmac.unlocks.v1`. Unlock times are read against the machine's local
+clock — there is nothing else to ask on a cabinet with no network. Ids that
+are not in the registry are kept in both, so a game pulled for one event and
+put back does not lose how it was left.
 
 ## Idle and attract
 
@@ -291,6 +329,7 @@ src/
     bindings.ts        per-controller button bindings + localStorage
     settings.ts        game scale, idle timeout + localStorage
     unlocks.ts         per-game release times + countdown strings
+    roster.ts          which games are switched on, + the state ladder
     cheat.ts           hidden button-sequence matcher
   games/
     registry.ts        the menu's game list
@@ -302,7 +341,7 @@ src/
     menu.ts
     inputTest.ts       live raw button/axis readout
     bindingSetup.ts    rebinding screen
-    options.ts         game scale, with a live sample per game
+    options.ts         scale, idle timeout, and a row per game
 ```
 
 ## Design rules
@@ -410,8 +449,8 @@ one allocation covers every scale.
 
 Nothing else changes — the menu builds itself from the registry, including the
 optional animated `drawPreview` thumbnail, and the options screen picks up the
-optional `drawScaleSample` the same way and gives the game an unlock row of
-its own.
+optional `drawScaleSample` the same way and gives the game a row of its own,
+with its state and its unlock time.
 
 ## Keeping it leak-free
 
@@ -462,6 +501,13 @@ length. That is what makes wrapping from the last game to the first slide
 continuously instead of rewinding across the whole track. At most three cards
 are drawn during a slide and one when settled, and `drawLetterboxBars()` runs
 last to clip whatever slid past the design box.
+
+A game switched **off** on the options screen is not on the carousel at all —
+no card, no dot, no place in the wrap-around — and with every game off the
+card area carries the `NO GAMES ENABLED` notice instead, with browsing and
+A/Start inert behind it. The list is read once on menu entry, which is enough:
+the options screen is the only thing that changes it and leaving options comes
+back through here.
 
 A game whose unlock time has not passed yet stays on the carousel as `???`:
 the preview still runs under a veil with a padlock over it, and the card's

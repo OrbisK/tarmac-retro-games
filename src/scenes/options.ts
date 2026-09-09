@@ -4,6 +4,16 @@ import { input } from "../core/input";
 import { k } from "../core/k";
 import { drawHints, type Hint } from "../core/prompts";
 import { installQuitToMenu } from "../core/quit";
+import {
+  GAME_STATE_OFF,
+  GAME_STATE_TIMED,
+  gameStateHelp,
+  gameStateIndex,
+  gameStateText,
+  nudgeGameState,
+  resetRoster,
+  rosterIsCustomised,
+} from "../core/roster";
 import { defineScene, goTo, INPUT_TEST_SCENE, OPTIONS_SCENE } from "../core/scene";
 import {
   GAME_SCALE_STEPS,
@@ -21,10 +31,9 @@ import {
   isLocked,
   nudgeUnlock,
   resetUnlocks,
-  UNLOCK_FIELDS,
+  UNLOCK_TIME_FIELDS,
   unlockCountdownText,
   unlockFieldText,
-  unlockScheduled,
   unlocksAreCustomised,
 } from "../core/unlocks";
 import {
@@ -39,16 +48,22 @@ import {
 import { GAMES } from "../games/registry";
 
 /**
- * Options: the cabinet-side settings — game scale, the idle timeout, and a
- * release time per game.
+ * Options: the cabinet-side settings — game scale, the idle timeout, and one
+ * row per game saying whether it plays and from when.
  *
  * Navigated with **directions only**, like the input test and button setup it
  * sits next to — this screen is reachable on a pad whose face buttons report
  * the wrong indices, and it should stay usable there. That is what shapes the
- * unlock rows: with four directions and no confirm button, a row is *entered*
+ * game rows: with four directions and no confirm button, a row is *entered*
  * with Right, its fields are walked with Left/Right, values are changed with
  * Up/Down, and Left off the first field leaves the row again. Up/Down are the
  * row picker until a row is entered, and the value knob after.
+ *
+ * It is also why a game's first field is one three-position state — `OFF`,
+ * `ON`, `TIMED` — rather than a roster switch and a schedule switch side by
+ * side. There is no room for a seventh field next to a 12-character title and
+ * a countdown, and the operator is answering one question anyway: does this
+ * game play, and from when. `core/roster.ts` composes the two flags.
  *
  * Each game draws its own scale sample below at true design-unit size, so a
  * change can be judged here rather than by launching a match and coming back.
@@ -60,14 +75,14 @@ interface ScaleRow {
 interface IdleRow {
   readonly kind: "idle";
 }
-interface UnlockRow {
-  readonly kind: "unlock";
+interface GameRow {
+  readonly kind: "game";
   readonly game: GameDefinition;
 }
 interface ResetRow {
   readonly kind: "reset";
 }
-type Row = ScaleRow | IdleRow | UnlockRow | ResetRow;
+type Row = ScaleRow | IdleRow | GameRow | ResetRow;
 
 /**
  * Built once at module load, not per frame: the registry is fixed for the life
@@ -76,7 +91,7 @@ type Row = ScaleRow | IdleRow | UnlockRow | ResetRow;
 const ROWS: readonly Row[] = [
   { kind: "scale" },
   { kind: "idle" },
-  ...GAMES.map((game): UnlockRow => ({ kind: "unlock", game })),
+  ...GAMES.map((game): GameRow => ({ kind: "game", game })),
   { kind: "reset" },
 ];
 
@@ -91,15 +106,24 @@ const PIP_SIZE = 7;
 const PIP_STRIDE = 11;
 
 /**
- * Left edge of each unlock field, in `UNLOCK_FIELDS` order — on/off, day,
- * month, year, hour, minute — and the width of its box. Fixed rather than
- * measured, so the columns line up down the list whatever the values say,
- * and wide enough that the box the cursor draws never touches its neighbour.
+ * The fields of a game row: the state, then `UNLOCK_TIME_FIELDS`.
+ *
+ * One list rather than two, because the cursor walks all six with the same
+ * two directions; index 0 goes to `core/roster.ts` and the rest to
+ * `core/unlocks.ts`.
  */
-const FIELD_X = [90, 116, 134, 158, 186, 209] as const;
-const FIELD_W = [22, 16, 22, 26, 16, 16] as const;
+const FIELD_COUNT = 1 + UNLOCK_TIME_FIELDS.length;
+
+/**
+ * Left edge of each of those fields and the width of its box. Fixed rather
+ * than measured, so the columns line up down the list whatever the values
+ * say, and wide enough that the box the cursor draws never touches its
+ * neighbour — the state box takes `TIMED`, the widest value on the screen.
+ */
+const FIELD_X = [90, 130, 148, 172, 200, 223] as const;
+const FIELD_W = [36, 16, 22, 26, 16, 16] as const;
 /** Between the hour and minute boxes, not a field of its own. */
-const COLON_X = 203;
+const COLON_X = 217;
 
 const PANEL_TOP = ROWS_TOP + ROW_H * ROWS.length + 6;
 const PANEL_H = DESIGN_HEIGHT - PANEL_TOP - 40;
@@ -138,8 +162,8 @@ const IDLE_HINTS = [
   { text: "INPUT" },
 ] as const satisfies readonly Hint[];
 
-/** An unlock row that has not been entered yet: Right goes in. */
-const UNLOCK_HINTS = [
+/** A game row that has not been entered yet: Right goes in. */
+const GAME_HINTS = [
   { button: "up" },
   { button: "down" },
   { text: "PICK" },
@@ -151,8 +175,8 @@ const UNLOCK_HINTS = [
   { text: "INPUT" },
 ] as const satisfies readonly Hint[];
 
-/** Inside an unlock row: directions change meaning, so they are re-labelled. */
-const UNLOCK_EDIT_HINTS = [
+/** Inside a game row: directions change meaning, so they are re-labelled. */
+const GAME_EDIT_HINTS = [
   { button: "left" },
   { button: "right" },
   { text: "FIELD" },
@@ -179,7 +203,7 @@ const RESET_HINTS = [
 ] as const satisfies readonly Hint[];
 
 /** The one thing about editing a row that the hint row has no space for. */
-const EDIT_HELP = "LEFT FROM ON/OFF LEAVES THE ROW";
+const EDIT_HELP = "LEFT FROM THE FIRST FIELD LEAVES THE ROW";
 
 /** Filtered once at module load, for the same reason as `ROWS`. */
 const SAMPLE_GAMES = GAMES.filter((game) => game.drawScaleSample);
@@ -253,19 +277,41 @@ function drawIdleRow(y: number): void {
   }
 }
 
+/** The text in field `i` of a game row. */
+function fieldText(id: string, i: number): string {
+  return i === 0 ? gameStateText(id) : unlockFieldText(id, UNLOCK_TIME_FIELDS[i - 1]);
+}
+
+/** Step field `i` of a game row. Returns whether it moved. */
+function nudgeField(id: string, i: number, delta: number): boolean {
+  return i === 0 ? nudgeGameState(id, delta) : nudgeUnlock(id, UNLOCK_TIME_FIELDS[i - 1], delta);
+}
+
 /**
- * One game's release time: on/off, the timestamp field by field, and where
- * that leaves the game right now.
+ * One game: whether it plays, the release timestamp field by field, and where
+ * that leaves it right now.
  *
  * `field` is the field being edited, or -1 when the row has not been entered.
- * The countdown on the right is what makes a wrong cabinet clock obvious: it
- * is the same number the menu will show a player.
+ * The right-hand column is the consequence rather than the setting — `HIDDEN`,
+ * `OPEN`, or the countdown a player will see — and the countdown is also what
+ * makes a wrong cabinet clock obvious, being the same number the menu shows.
  */
-function drawUnlockRow(game: GameDefinition, y: number, field: number, now: number): void {
-  drawLabel({ text: game.title, x: LABEL_X, y, size: FONT_SMALL, color: C[game.accent] });
+function drawGameRow(game: GameDefinition, y: number, field: number, now: number): void {
+  const state = gameStateIndex(game.id);
+  const off = state === GAME_STATE_OFF;
+  // A game that is off gives up its accent, the same way a locked card does
+  // on the menu: the colour is part of an identity the cabinet is not
+  // offering. Never the only cue — the state field and the status say it too.
+  drawLabel({
+    text: game.title,
+    x: LABEL_X,
+    y,
+    size: FONT_SMALL,
+    color: off ? C.textDim : C[game.accent],
+  });
 
-  const scheduled = unlockScheduled(game.id);
-  for (let i = 0; i < UNLOCK_FIELDS.length; i++) {
+  const timed = state === GAME_STATE_TIMED;
+  for (let i = 0; i < FIELD_COUNT; i++) {
     const active = i === field;
     if (active) {
       drawBox({
@@ -277,13 +323,18 @@ function drawUnlockRow(game: GameDefinition, y: number, field: number, now: numb
         outline: C.accent,
       });
     }
-    // The time is dimmed while the schedule is off: still readable — it can
-    // be set before being armed — but plainly not in force. `textDim` rather
-    // than `dim`, which is a border grey and too low-contrast to read; the
-    // state is not carried by the dimming anyway, the ON/OFF field says it.
-    const color = active ? C.accent : i === 0 || scheduled ? C.text : C.textDim;
+    // The time is dimmed unless it is in force: still readable — it can be
+    // set before being armed, or while the game is off — but plainly not
+    // doing anything. `textDim` rather than `dim`, which is a border grey and
+    // too low-contrast to read; the dimming carries nothing on its own
+    // anyway, the state field says which of the three positions this is.
+    //
+    // `OFF` keeps its red under the cursor: the outline box is what marks the
+    // cursor, so the colour is free to go on saying the game is not playable.
+    const color =
+      i === 0 && off ? C.bad : active ? C.accent : i === 0 || timed ? C.text : C.textDim;
     drawLabel({
-      text: unlockFieldText(game.id, UNLOCK_FIELDS[i]),
+      text: fieldText(game.id, i),
       x: FIELD_X[i] + FIELD_W[i] / 2,
       y,
       size: FONT_SMALL,
@@ -296,22 +347,22 @@ function drawUnlockRow(game: GameDefinition, y: number, field: number, now: numb
     x: COLON_X,
     y,
     size: FONT_SMALL,
-    color: scheduled ? C.text : C.textDim,
+    color: timed ? C.text : C.textDim,
   });
 
   const locked = isLocked(game.id, now);
   drawLabel({
-    text: locked ? unlockCountdownText(game.id, now) : "OPEN",
+    text: off ? "HIDDEN" : locked ? unlockCountdownText(game.id, now) : "OPEN",
     x: DESIGN_WIDTH - 4,
     y,
     size: FONT_SMALL,
-    color: locked ? C.bad : C.good,
+    color: off || locked ? C.bad : C.good,
     anchor: "right",
   });
 }
 
 function drawResetRow(y: number): void {
-  const customised = settingsAreCustomised() || unlocksAreCustomised();
+  const customised = settingsAreCustomised() || unlocksAreCustomised() || rosterIsCustomised();
   drawLabel({ text: "RESET DEFAULTS", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
   drawLabel({
     text: customised ? "CHANGED" : "AT DEFAULT",
@@ -352,7 +403,7 @@ function main(): void {
   installQuitToMenu();
 
   let rowIndex = 0;
-  /** Field being edited on the selected unlock row, or -1 when not in one. */
+  /** Field being edited on the selected game row, or -1 when not in one. */
   let field = -1;
   let status = "";
   let statusLeft = 0;
@@ -377,20 +428,21 @@ function main(): void {
 
     const row = ROWS[rowIndex];
 
-    if (row.kind === "unlock" && field >= 0) {
+    if (row.kind === "game" && field >= 0) {
       if (input.anyPressed("left")) {
         if (field === 0) field = -1;
         else field--;
       } else if (input.anyPressed("right")) {
-        field = Math.min(UNLOCK_FIELDS.length - 1, field + 1);
+        field = Math.min(FIELD_COUNT - 1, field + 1);
       }
       if (field >= 0) {
         // Repeat rather than edge, unlike the scale row: stepping an hour a
         // minute at a time would otherwise be sixty presses.
         const step = (input.anyRepeated("up") ? 1 : 0) - (input.anyRepeated("down") ? 1 : 0);
-        const name = UNLOCK_FIELDS[field];
-        if (step !== 0 && nudgeUnlock(row.game.id, name, step) && name === "state") {
-          say(unlockScheduled(row.game.id) ? "UNLOCK TIME ON" : "UNLOCK TIME OFF");
+        if (step !== 0 && nudgeField(row.game.id, field, step) && field === 0) {
+          // The state field is the one whose consequence is not written on
+          // the row: `OFF` takes the game off the carousel altogether.
+          say(gameStateHelp(row.game.id));
         }
       }
     } else {
@@ -408,11 +460,12 @@ function main(): void {
         // steps is a short ladder to run off the end of on a held direction.
         if (input.anyPressed("left") && nudgeIdleReturn(-1)) say(idleStatus());
         if (input.anyPressed("right") && nudgeIdleReturn(1)) say(idleStatus());
-      } else if (current.kind === "unlock") {
+      } else if (current.kind === "game") {
         if (input.anyPressed("right")) field = 0;
       } else if (input.anyPressed("right")) {
         resetSettings();
         resetUnlocks();
+        resetRoster();
         say("DEFAULTS RESTORED");
       }
     }
@@ -457,13 +510,13 @@ function main(): void {
       }
       if (row.kind === "scale") drawScaleRow(y);
       else if (row.kind === "idle") drawIdleRow(y);
-      else if (row.kind === "unlock") drawUnlockRow(row.game, y, selected ? field : -1, now);
+      else if (row.kind === "game") drawGameRow(row.game, y, selected ? field : -1, now);
       else drawResetRow(y);
     }
 
     if (SHOW_SAMPLES) drawSamples();
 
-    const editing = ROWS[rowIndex].kind === "unlock" && field >= 0;
+    const editing = ROWS[rowIndex].kind === "game" && field >= 0;
     if (status !== "") {
       drawLabel({
         text: status,
@@ -486,13 +539,13 @@ function main(): void {
       x: 4,
       y: DESIGN_HEIGHT - 16,
       hints: editing
-        ? UNLOCK_EDIT_HINTS
+        ? GAME_EDIT_HINTS
         : ROWS[rowIndex].kind === "scale"
           ? SCALE_HINTS
           : ROWS[rowIndex].kind === "idle"
             ? IDLE_HINTS
-            : ROWS[rowIndex].kind === "unlock"
-              ? UNLOCK_HINTS
+            : ROWS[rowIndex].kind === "game"
+              ? GAME_HINTS
               : RESET_HINTS,
     });
   });

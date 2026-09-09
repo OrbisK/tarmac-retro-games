@@ -67,7 +67,8 @@ A game can be gated behind a release time (`core/unlocks.ts`, options screen).
 
 - **The menu is the only gate.** Games do not check; their scenes are only
   reachable through the carousel, so a second check would be a second place
-  to forget. Anything new that can start a game calls `isLocked` first.
+  to forget. Anything new that can start a game calls `isLocked` and
+  `gameEnabled` first.
 - A locked game is still on the carousel, as `???` over a dimmed preview with
   its countdown. Never show the title, tagline or accent colour of a locked
   game, and never open its controls modal — the modal names it and launches
@@ -77,6 +78,30 @@ A game can be gated behind a release time (`core/unlocks.ts`, options screen).
   allocate. Format there, not at the call site.
 - The clock is the machine's local clock, read as `Date.now()` per frame — so
   a card unlocks while the menu is open without anything watching for it.
+
+## Switching a game off
+
+A game can also be taken off the cabinet outright (`core/roster.ts`, options
+screen) — for a game that is **broken**, not one that is waiting.
+
+- **A game that is off is not on the carousel at all**: no card, no dot, no
+  place in the wrap-around. This is the opposite call from a timed unlock, on
+  purpose. A locked card is an advert with a countdown and something to come
+  back for; a broken game has neither, and a card that only ever refuses would
+  collect presses all day. Do not add an "out of order" card.
+- The menu filters `GAMES` **once, at scene entry**, into a local. Nothing but
+  the options screen changes the roster and leaving options enters the menu, so
+  there is no stale-list window — and a list rebuilt per frame would allocate
+  in `onDraw`. Handle `count === 0`: with every game off the menu draws the
+  `NO GAMES ENABLED` notice and browsing, launching and attract are all inert.
+- **One field, two flags.** The options row offers `OFF` / `ON` / `TIMED` as
+  one three-position state, because the operator is answering one question per
+  game and because a seventh field does not fit next to a 12-character title
+  and a countdown. `roster.ts` composes it from the roster switch and
+  `unlockScheduled`; the position is *derived*, never a third stored copy.
+  `unlocks.ts` owns the timestamp fields only.
+- Switching a game off never touches its unlock time — it is kept, dimmed, so
+  a schedule can be prepared before the game goes back on.
 
 ## Offline
 

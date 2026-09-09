@@ -14,16 +14,23 @@
  * wrong unlock time; the options screen shows the countdown next to the
  * stamp so that is visible while setting it.
  *
- * **Strings are cached per game**, rebuilt only when the schedule or the
+ * **Strings are cached per game**, rebuilt only when the stored time or the
  * whole-second countdown changes: the menu and the options screen draw these
  * every frame, and `onDraw` must not allocate.
  */
 
 const STORAGE_KEY = "tarmac.unlocks.v1";
 
-/** The fields the options screen steps through, in left-to-right order. */
-export const UNLOCK_FIELDS = ["state", "day", "month", "year", "hour", "minute"] as const;
-export type UnlockField = (typeof UNLOCK_FIELDS)[number];
+/**
+ * The timestamp fields the options screen steps through, left to right.
+ *
+ * Only the timestamp: whether the schedule is in force at all is the first
+ * field of that row, and it belongs to `core/roster.ts` — the operator sets
+ * one three-position state per game (off / on / timed) rather than a roster
+ * switch and a schedule switch side by side.
+ */
+export const UNLOCK_TIME_FIELDS = ["day", "month", "year", "hour", "minute"] as const;
+export type UnlockTimeField = (typeof UNLOCK_TIME_FIELDS)[number];
 
 const MONTHS = [
   "JAN",
@@ -147,7 +154,10 @@ export function secondsUntilUnlock(id: string, now: number): number {
   return Math.max(0, Math.ceil((entry.at - now) / 1000));
 }
 
-/** Switch the schedule on or off, keeping whatever time is set. */
+/**
+ * Switch the schedule on or off, keeping whatever time is set. Driven from the
+ * state ladder in `core/roster.ts`, not from a field of its own.
+ */
 export function setUnlockScheduled(id: string, on: boolean): boolean {
   const entry = entryOf(id);
   if (entry.on === on) return false;
@@ -167,12 +177,8 @@ function daysInMonth(year: number, month: number): number {
  * is the 1st of the next month, which is what anyone editing a timestamp
  * expects. Month and year clamp the day instead, so 31 MAR stepped to
  * February lands on the 28th rather than sliding into March.
- *
- * `state` is the on/off column: a positive step switches the schedule on.
  */
-export function nudgeUnlock(id: string, field: UnlockField, delta: number): boolean {
-  if (field === "state") return setUnlockScheduled(id, delta > 0);
-
+export function nudgeUnlock(id: string, field: UnlockTimeField, delta: number): boolean {
   const entry = entryOf(id);
   const d = new Date(entry.at);
   switch (field) {
@@ -230,9 +236,8 @@ export function resetUnlocks(): void {
 // were built from, so a frame that changes nothing allocates nothing.
 
 interface TextCache {
-  on: boolean;
   at: number;
-  /** One per `UNLOCK_FIELDS` entry, in the same order. */
+  /** One per `UNLOCK_TIME_FIELDS` entry, in the same order. */
   fields: string[];
   /** "10 SEP 14:00", or with the year when it is not the current one. */
   stamp: string;
@@ -247,7 +252,7 @@ function pad2(value: number): string {
 function textOf(id: string): TextCache {
   const entry = entryOf(id);
   let cache = textCache.get(id);
-  if (cache && cache.at === entry.at && cache.on === entry.on) return cache;
+  if (cache && cache.at === entry.at) return cache;
 
   const d = new Date(entry.at);
   const day = `${d.getDate()}`;
@@ -259,13 +264,12 @@ function textOf(id: string): TextCache {
   const stamp = sameYear
     ? `${day} ${month} ${hour}:${minute}`
     : `${day} ${month} ${year} ${hour}:${minute}`;
-  const fields = [entry.on ? "ON" : "OFF", day, month, year, hour, minute];
+  const fields = [day, month, year, hour, minute];
 
   if (!cache) {
-    cache = { on: entry.on, at: entry.at, fields, stamp };
+    cache = { at: entry.at, fields, stamp };
     textCache.set(id, cache);
   } else {
-    cache.on = entry.on;
     cache.at = entry.at;
     cache.fields = fields;
     cache.stamp = stamp;
@@ -274,8 +278,8 @@ function textOf(id: string): TextCache {
 }
 
 /** One field of the unlock time as the options screen shows it. */
-export function unlockFieldText(id: string, field: UnlockField): string {
-  return textOf(id).fields[UNLOCK_FIELDS.indexOf(field)] ?? "";
+export function unlockFieldText(id: string, field: UnlockTimeField): string {
+  return textOf(id).fields[UNLOCK_TIME_FIELDS.indexOf(field)] ?? "";
 }
 
 /** The unlock moment as a player-facing stamp, e.g. "10 SEP 14:00". */
