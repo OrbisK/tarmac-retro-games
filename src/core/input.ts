@@ -68,8 +68,28 @@ const KEY_ALIASES: Record<string, string> = {
   Meta: "meta",
 };
 
-/** Keys we swallow so the browser doesn't scroll or move focus mid-game. */
-const SWALLOW = new Set(["up", "down", "left", "right", "space", "tab", "backspace"]);
+/**
+ * Keys we swallow so the browser doesn't scroll, move focus, or act on a key
+ * the cabinet has its own use for.
+ *
+ * The function keys are the second kind: `F5` is reload and `F3` is
+ * find-in-page in Firefox, so without this, the two screens an operator needs
+ * are behind keys the browser answers first — F5 would reload the cabinet
+ * instead of opening the options. `F12` is deliberately absent: Chrome will
+ * not give up devtools, and there is no point pretending otherwise.
+ */
+const SWALLOW = new Set([
+  "up",
+  "down",
+  "left",
+  "right",
+  "space",
+  "tab",
+  "backspace",
+  "f3",
+  "f4",
+  "f5",
+]);
 
 function keyName(ev: KeyboardEvent): string {
   return KEY_ALIASES[ev.key] ?? ev.key.toLowerCase();
