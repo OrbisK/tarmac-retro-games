@@ -1,5 +1,6 @@
 import type { GameDefinition } from "../core/game";
 import { brawlGame } from "./brawl";
+import { lastStandGame } from "./lastStand";
 import { pongGame } from "./pong";
 import { snakeDuelGame } from "./snakeDuel";
 import { tetrisDuelGame } from "./tetrisDuel";
@@ -13,4 +14,5 @@ export const GAMES: readonly GameDefinition[] = [
   snakeDuelGame,
   tetrisDuelGame,
   brawlGame,
+  lastStandGame,
 ];

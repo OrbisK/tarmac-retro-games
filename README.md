@@ -90,6 +90,10 @@ buttons report the wrong indices.
 
 **Game scale** is the first row — see below. Each game draws its own sample
 underneath at true size, so the effect is visible without launching a match.
+The strip holds three panels and windows across the registry, centred on the
+last game row the cursor visited and outlined in that game's accent — a panel
+narrow enough to fit every game at once is too narrow to read, and the
+registry only grows.
 
 **Idle timeout** is the second: how long a screen sits untouched before the
 cabinet takes itself back to the menu — `OFF`, `30S`, `45S`, `1M` (the
@@ -337,6 +341,7 @@ src/
     snakeDuel.ts
     tetrisDuel.ts
     brawl.ts
+    lastStand.ts
   scenes/
     menu.ts
     inputTest.ts       live raw button/axis readout

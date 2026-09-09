@@ -210,6 +210,25 @@ const SAMPLE_GAMES = GAMES.filter((game) => game.drawScaleSample);
 const SHOW_SAMPLES = SAMPLE_GAMES.length > 0 && PANEL_H >= PANEL_MIN_H;
 const FOOT_TOP = SHOW_SAMPLES ? PANEL_TOP + PANEL_H : PANEL_TOP;
 
+/**
+ * A panel narrower than this cannot hold a 12-character title, let alone a
+ * sample at true size — so the strip is a **window** of that many panels
+ * rather than one panel per game. Dividing the box by the registry worked at
+ * four games and stopped working at five, and the registry only grows.
+ *
+ * The window follows the cursor: it centres on the last game row visited and
+ * stays there while the scale itself is being changed two rows up, which is
+ * the sequence an operator actually performs.
+ */
+const PANEL_MIN_W = 92;
+const PANEL_VISIBLE = Math.max(
+  1,
+  Math.min(
+    SAMPLE_GAMES.length,
+    Math.floor((DESIGN_WIDTH - PANEL_MARGIN * 2 + PANEL_GAP) / (PANEL_MIN_W + PANEL_GAP)),
+  ),
+);
+
 /** "1x", "1.25x" — the trailing zero on 1.50 would read as false precision. */
 function scaleText(): string {
   return `${gameScale()}x`;
@@ -373,15 +392,33 @@ function drawResetRow(y: number): void {
   });
 }
 
-/** One panel per game that offers a sample, side by side across the box. */
-function drawSamples(): void {
+/**
+ * The sample strip: `PANEL_VISIBLE` panels, windowed around `anchor`.
+ *
+ * `selected` is the panel whose game row the cursor is on, outlined in its own
+ * accent — without it, a strip that scrolls under a cursor two rows away would
+ * be movement with no stated cause.
+ */
+function drawSamples(anchor: number, selected: number): void {
   const total = DESIGN_WIDTH - PANEL_MARGIN * 2;
-  const panelW = (total - PANEL_GAP * (SAMPLE_GAMES.length - 1)) / SAMPLE_GAMES.length;
+  const panelW = (total - PANEL_GAP * (PANEL_VISIBLE - 1)) / PANEL_VISIBLE;
+  const start = Math.max(
+    0,
+    Math.min(SAMPLE_GAMES.length - PANEL_VISIBLE, anchor - Math.floor(PANEL_VISIBLE / 2)),
+  );
 
-  for (let i = 0; i < SAMPLE_GAMES.length; i++) {
-    const game = SAMPLE_GAMES[i];
+  for (let i = 0; i < PANEL_VISIBLE; i++) {
+    const index = start + i;
+    const game = SAMPLE_GAMES[index];
     const x = PANEL_MARGIN + i * (panelW + PANEL_GAP);
-    drawPanel({ x, y: PANEL_TOP, w: panelW, h: PANEL_H, fill: C.bg, outline: C.dim });
+    drawPanel({
+      x,
+      y: PANEL_TOP,
+      w: panelW,
+      h: PANEL_H,
+      fill: C.bg,
+      outline: index === selected ? C[game.accent] : C.dim,
+    });
     drawLabel({
       text: game.title,
       x: x + panelW / 2,
@@ -390,6 +427,30 @@ function drawSamples(): void {
       color: C[game.accent],
       anchor: "center",
     });
+    // A marker in the outer corner where the strip continues, so panels that
+    // are off the window are known to be there rather than missing.
+    if (i === 0 && start > 0) {
+      drawTriangle({
+        x1: x + 8,
+        y1: PANEL_TOP + 3,
+        x2: x + 8,
+        y2: PANEL_TOP + 11,
+        x3: x + 3,
+        y3: PANEL_TOP + 7,
+        color: C.dim,
+      });
+    }
+    if (i === PANEL_VISIBLE - 1 && index < SAMPLE_GAMES.length - 1) {
+      drawTriangle({
+        x1: x + panelW - 8,
+        y1: PANEL_TOP + 3,
+        x2: x + panelW - 8,
+        y2: PANEL_TOP + 11,
+        x3: x + panelW - 3,
+        y3: PANEL_TOP + 7,
+        color: C.dim,
+      });
+    }
     game.drawScaleSample?.(
       x + 3,
       PANEL_TOP + 3 + FONT_SMALL + 3,
@@ -405,6 +466,9 @@ function main(): void {
   let rowIndex = 0;
   /** Field being edited on the selected game row, or -1 when not in one. */
   let field = -1;
+  /** Where the sample strip is parked, and which panel the cursor is on. */
+  let sampleAnchor = 0;
+  let sampleSelected = -1;
   let status = "";
   let statusLeft = 0;
 
@@ -418,6 +482,12 @@ function main(): void {
     // Leaving a row always drops out of its fields: a field cursor left
     // behind would reappear the next time the row came round.
     field = -1;
+    // Tracked here rather than measured in `onDraw`: the strip only moves
+    // when the cursor does, and the anchor is deliberately sticky — stepping
+    // up to the scale row keeps the game you just looked at on screen.
+    const row = ROWS[rowIndex];
+    sampleSelected = row.kind === "game" ? SAMPLE_GAMES.indexOf(row.game) : -1;
+    if (sampleSelected >= 0) sampleAnchor = sampleSelected;
   }
 
   k.onUpdate(() => {
@@ -514,7 +584,7 @@ function main(): void {
       else drawResetRow(y);
     }
 
-    if (SHOW_SAMPLES) drawSamples();
+    if (SHOW_SAMPLES) drawSamples(sampleAnchor, sampleSelected);
 
     const editing = ROWS[rowIndex].kind === "game" && field >= 0;
     if (status !== "") {
