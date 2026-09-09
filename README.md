@@ -161,6 +161,7 @@ src/
     pong.ts
     snakeDuel.ts
     tetrisDuel.ts
+    brawl.ts
   scenes/
     menu.ts
     inputTest.ts       live raw button/axis readout
@@ -233,6 +234,7 @@ scale-sensitive grow, so raising the scale trades board area for chunk:
 | Pong paddle | 4x30 | 8x60 |
 | Snake cell | 8 (40x28 board) | 16 (20x14 board) |
 | Tetris next-piece cell | 5 | 10 |
+| Brawl round clock | 20 | 40 |
 | Countdown text | 28 | 56 |
 
 Steps are discrete because at this resolution a factor of 1.07 buys nothing
@@ -244,6 +246,13 @@ are stated in those dimensions, and two wells plus their side panels is
 exactly what 320 units holds. So the setting drives what is read rather than
 played, the next-piece preview and the countdown, and its sample says
 `WELL CELL 10` underneath at every step.
+
+Tarmac Brawl lands the same way, for a different reason: a fighter's size *is*
+their reach. A 96-unit body against a stage that never scrolls is the entire
+spacing game — how many walking steps a kick is worth, how far a jump crosses,
+how pinned the corner feels. Scaling the bodies would not make the match
+chunkier, it would make it a shorter stage. So the setting takes the round
+clock and the countdown, and leaves the fight alone.
 
 **For game code:** keep tuning the *baseline* numbers, and draw with
 `scaleUnits(BASE)` from `core/settings.ts` for the handful that should follow
