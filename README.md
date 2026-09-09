@@ -6,7 +6,7 @@ with a 4:3 layout letterboxed into the window.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173/tarmac-retro-games/
 npm run build      # typecheck + production bundle into dist/
 npm run typecheck
 ```
@@ -213,10 +213,10 @@ thing you want while editing. `F3` shows `sw ok` once it is registered, `sw
 off` if it never was (dev, or a plain `file://` open), and `sw upd` when a new
 build is waiting.
 
-`display: fullscreen` and `orientation: landscape` in the manifest, with
-`base: "./"` and a relative `scope`/`start_url`, so an installed copy takes
-the whole monitor and the same `dist/` works from any subdirectory or kiosk
-shell.
+`display: fullscreen` and `orientation: landscape` in the manifest, so an
+installed copy takes the whole monitor. `scope` and `start_url` are relative,
+resolving against the manifest's own URL under `base` — see **Deploying** for
+what `base` is set to and what that costs.
 
 **Updates land on the menu, never mid-game.** The usual auto-update worker
 claims the page and reloads it the moment a new build appears, which on a
@@ -236,6 +236,38 @@ is the normal case.
 Icons live in `public/icons/`, rasterised from `icon.svg` in the same palette
 as everything else; the `favicon` in `index.html` is the same mark inlined so
 the tab costs no request.
+
+## Deploying
+
+A push to `main` builds the app and publishes `dist/` to GitHub Pages
+(`.github/workflows/deploy.yml`).
+
+`base` in `vite.config.ts` is **`/tarmac-retro-games/`**, the path a project
+page is served from, and it has to match the repository name: rename the repo,
+move to a user page at the origin root, or serve the build from a kiosk shell
+at another path, and every asset 404s until `base` is changed with it. The
+alternative is `"./"`, which resolves against whatever document loads the
+page and so works from any path; what it gives up is deep URLs under the base,
+which is irrelevant here — the cabinet is one document with no routing, and
+Pages answers such a URL with its own 404 rather than the app. Either works;
+this one is explicit.
+
+`base` applies to `vite dev` and `vite preview` too, which is why both serve
+at `http://localhost:<port>/tarmac-retro-games/` and redirect `/` to it.
+
+One-time setup, in **Settings → Pages → Build and deployment**: set **Source**
+to **GitHub Actions**. Then push to `main`, or run the workflow by hand from
+the Actions tab.
+
+The typecheck is part of `npm run build`, so a type error fails the deploy
+rather than shipping. Deployments are serialised and never cancelled mid-flight
+— a partially replaced site would serve files from two builds at once, which is
+the one thing the precache manifest cannot reconcile.
+
+The hosted copy is the same PWA as the cabinet's: visit it once over the
+network and it is installable and works offline from then on, with updates
+applied on menu entry (see above). That makes Pages a reasonable way to load
+a cabinet in the first place — open the page, install it, unplug the network.
 
 ## Layout
 

@@ -2,8 +2,11 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  // Relative base so the build can be dropped into any subdirectory / kiosk shell.
-  base: "./",
+  // The GitHub Pages project page this deploys to. An absolute base means the
+  // build is tied to this one path — served from anywhere else, every asset
+  // 404s — so a kiosk shell or a different subdirectory needs this changed (or
+  // `"./"`, which resolves against whatever document loads it).
+  base: "/tarmac-retro-games/",
   build: { target: "es2022" },
   server: { host: true },
   plugins: [
@@ -28,7 +31,9 @@ export default defineConfig({
         // with the network unplugged, that is the wrong failure mode.
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
       },
-      // `scope` and `start_url` stay relative for the same reason `base` is.
+      // `scope` and `start_url` stay relative even though `base` is not: they
+      // resolve against the manifest's own URL, which already sits under the
+      // base, so this is the same path by a shorter route.
       // No `id`: unlike every other URL here it resolves against the *origin*
       // rather than the manifest, so a relative one served from a
       // subdirectory would claim the origin root as this app's identity.

@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+# The cabinet's build is a static, self-contained PWA, so Pages is the whole
+# hosting story: build once on a push to main, upload `dist/`, done.
+on:
+  push:
+    branches: [main]
+  # So a build can be re-published without an empty commit — handy when the
+  # only thing that changed is the Pages setting itself.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  # `deploy-pages` authenticates to Pages with an OIDC token, not a PAT.
+  id-token: write
+
+# One deployment at a time, and never cancel one in flight: a half-applied
+# Pages deployment would leave the site serving a mix of two builds, which is
+# exactly the state the service worker's precache manifest cannot recover from
+# on its own.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `ci`, not `install`: the lockfile is the build, and a resolution that
+      # drifts between here and a local `npm run build` is a bug we would find
+      # on the cabinet rather than in CI.
+      - run: npm ci
+
+      # Runs `tsc --noEmit && vite build` — the typecheck is part of the build
+      # script, so a type error fails the deployment instead of shipping.
+      - run: npm run build
+
+      # Nothing to configure here, but note the coupling: `vite.config.ts` sets
+      # `base` to "/tarmac-retro-games/", so this only serves correctly from a
+      # project page of that name. Renaming the repo means changing `base`.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
