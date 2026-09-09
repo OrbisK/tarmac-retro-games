@@ -9,6 +9,7 @@ import type { GameDefinition } from "../core/game";
 import { idleSeconds } from "../core/idle";
 import { input } from "../core/input";
 import { k } from "../core/k";
+import { syncPwa } from "../core/pwa";
 import { defineScene, goTo, INPUT_TEST_SCENE, MENU_SCENE, OPTIONS_SCENE } from "../core/scene";
 import {
   C,
@@ -243,6 +244,11 @@ function drawCard(opts: {
 }
 
 function main(): void {
+  // Between two games, with nobody playing: the one safe moment to swap in a
+  // new build, and a good moment to go looking for one. `core/pwa.ts` says
+  // why the menu owns this rather than the worker deciding for itself.
+  syncPwa();
+
   const count = GAMES.length;
   /** Unbounded: the shown game is this modulo `count`, so wrapping is smooth. */
   let virtualIndex = 0;

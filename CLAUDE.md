@@ -78,6 +78,23 @@ A game can be gated behind a release time (`core/unlocks.ts`, options screen).
 - The clock is the machine's local clock, read as `Date.now()` per frame — so
   a card unlocks while the menu is open without anything watching for it.
 
+## Offline
+
+The build is a PWA and precaches itself whole; nothing is fetched at runtime,
+so keep it that way — a font, sprite or sound pulled from a URL breaks the one
+guarantee here. Anything new that has to ship as a file goes in `public/` and
+is picked up by `globPatterns` in `vite.config.ts`.
+
+- **The menu is the only place an update is applied**, the same way it is the
+  only unlock gate: `core/pwa.ts` sits on a waiting build until `syncPwa()`
+  runs on menu entry. Never switch the worker to `autoUpdate` — it would
+  reload the page mid-rally.
+- The update check rides on that same call, throttled. Do not add an interval
+  for it: the cabinet returns to the menu on its own constantly, and a
+  long-lived timer is exactly what `core/lifecycle.ts` exists to avoid.
+- The worker is off in `vite dev`. Test offline behaviour with
+  `npm run build && npm run preview`, and read `sw` in the `F3` overlay.
+
 ## Always high contrast
 
 Every colour used for text sits at 6.5:1 or better against `bg`; the border

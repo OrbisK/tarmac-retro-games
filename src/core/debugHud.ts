@@ -3,6 +3,7 @@ import { k } from "./k";
 import { idleSeconds } from "./idle";
 import { BUTTONS, input } from "./input";
 import { pendingCleanupCount } from "./lifecycle";
+import { pwaStatus } from "./pwa";
 import { C, drawLabel, drawPanel, FONT_SMALL, measureLabel } from "./ui";
 
 /**
@@ -120,7 +121,8 @@ export function installDebugHud(): void {
         lines.push(`scn ${sceneSwitches} cln ${pendingCleanupCount()}`);
         // `idle` is the one to watch when a game bails out on its own.
         lines.push(`pad ${input.padCount()} idle ${Math.floor(idleSeconds())}`);
-        lines.push(`up ${formatUptime()}`);
+        // `sw` says whether the cabinet is good for offline: ok / off / upd.
+        lines.push(`up ${formatUptime()} sw ${pwaStatus()}`);
 
         const mb = heapMb();
         if (mb > 0) {

@@ -3,11 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0b0b16" />
+    <meta name="description" content="A 2-player arcade cabinet: one menu, several retro games." />
+    <!-- iOS ignores the manifest for these two. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Tarmac Retro Games</title>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2310101c'/%3E%3Crect x='3' y='4' width='2' height='8' fill='%2339c8f0'/%3E%3Crect x='11' y='4' width='2' height='8' fill='%23f04868'/%3E%3Crect x='7' y='7' width='2' height='2' fill='%23ffcc33'/%3E%3C/svg%3E"
-    />
+    <!-- Same mark as public/icons/, inlined so the tab icon costs no request. -->
+    <link rel="icon" href="data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'><rect%20width='16'%20height='16'%20fill='%230b0b16'/><g%20fill='%231f1f38'><rect%20x='7'%20y='1'%20width='2'%20height='2'/><rect%20x='7'%20y='4'%20width='2'%20height='2'/><rect%20x='7'%20y='10'%20width='2'%20height='2'/><rect%20x='7'%20y='13'%20width='2'%20height='2'/></g><rect%20x='3'%20y='4'%20width='2'%20height='8'%20fill='%234fd6ff'/><rect%20x='11'%20y='4'%20width='2'%20height='8'%20fill='%23ff5c7a'/><rect%20x='7'%20y='7'%20width='2'%20height='2'%20fill='%23ffd23f'/></svg>" />
     <style>
       html,
       body {

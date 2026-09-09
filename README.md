@@ -196,6 +196,47 @@ that already knows what every player did this frame:
 to see whether something on the cabinet is reporting input nobody is giving
 it.
 
+## Offline and installing
+
+The cabinet is expected to run with nothing plugged into it, so the build is a
+PWA (`vite-plugin-pwa`, configured in `vite.config.ts`). Every byte the app
+needs is precached on first load: there are no fonts, sprites or sounds
+fetched at runtime, and settings and bindings live in `localStorage`. After
+one visit over the network, the machine works forever without it.
+
+```bash
+npm run build && npm run preview   # the worker is only real in a build
+```
+
+The worker is off in `vite dev` on purpose — a stale precache is the last
+thing you want while editing. `F3` shows `sw ok` once it is registered, `sw
+off` if it never was (dev, or a plain `file://` open), and `sw upd` when a new
+build is waiting.
+
+`display: fullscreen` and `orientation: landscape` in the manifest, with
+`base: "./"` and a relative `scope`/`start_url`, so an installed copy takes
+the whole monitor and the same `dist/` works from any subdirectory or kiosk
+shell.
+
+**Updates land on the menu, never mid-game.** The usual auto-update worker
+claims the page and reloads it the moment a new build appears, which on a
+cabinet can end a rally in progress. So the worker is registered in *prompt*
+mode and `core/pwa.ts` holds the new version back until `syncPwa()` is called
+from menu entry — between two games, with nobody playing, where a reload is
+indistinguishable from the menu redrawing. There is no actual prompt: nobody
+at an arcade cabinet answers a dialog about service workers.
+
+The update *check* rides on the same call rather than on a timer. The cabinet
+returns to the menu constantly — a finished game, the idle bail-out — which is
+a better cadence than any interval we would pick, and it means there is no
+long-lived timer to own. It is throttled to once every 15 minutes so a busy
+carousel is not a request per card, and it fails silently offline, which here
+is the normal case.
+
+Icons live in `public/icons/`, rasterised from `icon.svg` in the same palette
+as everything else; the `favicon` in `index.html` is the same mark inlined so
+the tab costs no request.
+
 ## Layout
 
 ```
