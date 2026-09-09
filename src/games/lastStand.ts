@@ -15,6 +15,7 @@ import {
   CENTER_X,
   drawBar,
   drawBox,
+  drawDot,
   drawLabel,
   drawRule,
   drawTriangle,
@@ -47,6 +48,34 @@ import {
  * drops that player into the wave in progress with a full three hearts. The
  * player who launched the game from the menu is joined for them.
  *
+ * **Kills pay out, and a power-up is one colour and three shapes.** Every
+ * sixth walker or runner drops a yellow marker — stripes for rapid fire, a
+ * disc for a shield, a wedge for a spread shot — dealt from a shuffled bag so
+ * a run of any length sees all three. Walking onto one arms it for a few
+ * seconds. Colour separates the two *classes* of drop rather than the
+ * individual powers: green is a heart, which is instant and permanent and
+ * still comes off a brute, and yellow is a timer, told apart by silhouette
+ * the same way the enemies are. Nothing here is a hollow box, because an
+ * empty heart pip in the HUD already is one.
+ *
+ * **One slot each, and it dies with you.** A second power replaces the first,
+ * so the HUD needs one badge and one bar per player and a drop is always a
+ * decision rather than an accumulation. Going down clears it — the shield is
+ * the strongest thing in the game and it should not be waiting on the floor
+ * of the next wave. A power carries across a wave break, though: taking one
+ * with the last walker already dead is good play, not an exploit, so the
+ * timers and the shelf life of a drop both stop outside a live wave.
+ *
+ * **The shield throws bodies off rather than letting them through.** Post-hit
+ * invulnerability is a grace period and enemies walk over it; a shield is a
+ * wall, and a shielded player wading into a crowd knocks it apart. That is
+ * also what makes a revive under pressure possible, which is the co-op read
+ * the whole game is built around.
+ *
+ * Waves were re-cut around all of this: more of everything for longer, a
+ * faster arrival cadence and higher speed ceilings, so the ramp keeps
+ * climbing past the point where an armed pair used to settle in.
+ *
  * **Game scale.** The bullet and the countdown: the two things a player reads
  * with their hands already busy, and the bullet is the smallest thing on the
  * screen by some way. Scaling it does move the odds slightly — a 6-unit shot
@@ -54,6 +83,7 @@ import {
  * makes with the ball, and the same reason: a shot you cannot see is worse
  * than one that lands a little more often. Bodies, the arena and every speed
  * stay fixed, so the pace of a wave is the pace of a wave at any setting.
+ * Drops do not scale either: they are read off the floor, not aimed with.
  *
  * Structurally this follows the other games: plain numbers in design units,
  * fixed-capacity lists allocated at scene entry, one `onUpdate` and one
@@ -65,6 +95,19 @@ const SCENE = "last-stand";
 /* ---------------------------------------------------------------- arena -- */
 
 const HUD_H = 22;
+/**
+ * The power badge in the HUD: glyph then bar, mirrored for player two.
+ *
+ * It fits between the heart pips (which end at 44) and the wave counter in
+ * the middle, with room either side — the one place on the strip that is
+ * empty and still on the right player's half.
+ */
+const BADGE_X = 54;
+const BADGE_CY = 8;
+const BADGE_SIZE = 8;
+const BADGE_BAR_X = 62;
+const BADGE_BAR_W = 22;
+const BADGE_BAR_H = 6;
 const ARENA_TOP = HUD_H;
 const ARENA_BOTTOM = DESIGN_HEIGHT;
 const ARENA_CY = (ARENA_TOP + ARENA_BOTTOM) / 2;
@@ -88,6 +131,13 @@ const KNOCK_DECAY = 420;
 const BULLET_BASE = 4;
 const BULLET_SPEED = 235;
 const FIRE_COOLDOWN = 0.19;
+/** Rapid fire, as a multiplier on that cooldown. */
+const RAPID_SCALE = 0.42;
+/** Spread: three shots, and the angle between neighbours. About 16 degrees —
+ *  wide enough to catch two walkers side by side, narrow enough that a runner
+ *  at range still takes the middle shot. */
+const SPREAD_SHOTS = 3;
+const SPREAD_ANGLE = 0.28;
 
 /** Seconds a downed player has before they are out for the rest of the wave. */
 const BLEED_SECONDS = 12;
@@ -131,6 +181,11 @@ interface Player {
   revive: number;
   /** Set by the partner each frame they are close enough to work. */
   beingRevived: boolean;
+  /** The armed power, as a `PICK_*` kind. 0 is nothing. */
+  power: number;
+  powerTime: number;
+  /** Counts down the name printed over the head after a pickup. */
+  powerFlash: number;
 }
 
 /* -------------------------------------------------------------- enemies -- */
@@ -152,7 +207,7 @@ const E_SCORE = [10, 15, 40] as const;
 const E_SPEED = [26, 58, 19] as const;
 /** Added per wave past the first, and the ceiling it climbs to. */
 const E_SPEED_GAIN = [1.7, 2.4, 1.1] as const;
-const E_SPEED_MAX = [54, 96, 36] as const;
+const E_SPEED_MAX = [60, 104, 40] as const;
 const E_COLOR: readonly Color[] = [C.tetL, C.tetT, C.tetL];
 
 /** Seconds an arrival is telegraphed at the edge before it can touch anyone. */
@@ -160,11 +215,15 @@ const SPAWN_WARM = 0.55;
 /** Arrivals keep this far from anyone on their feet, where the edge allows. */
 const SPAWN_CLEARANCE = 52;
 /** On screen at once. Past this the wave queues instead — a swarm you cannot
- *  pick shapes out of is not harder, only noisier. */
-const MAX_LIVE = 16;
-const CAP_ENEMIES = 20;
-const CAP_BULLETS = 28;
-const CAP_PICKUPS = 4;
+ *  pick shapes out of is not harder, only noisier. Eighteen rather than the
+ *  sixteen it started at, now that the pair can be armed; past that the
+ *  silhouettes stop being separable and it is noise again. */
+const MAX_LIVE = 18;
+const CAP_ENEMIES = 22;
+/** Two players on spread, both holding fire, is about 22 in flight; the rest
+ *  is headroom, because running dry costs a shot rather than degrading. */
+const CAP_BULLETS = 40;
+const CAP_PICKUPS = 6;
 
 interface Enemy {
   kind: number;
@@ -190,6 +249,7 @@ interface Bullet {
 }
 
 interface Pickup {
+  kind: number;
   x: number;
   y: number;
   life: number;
@@ -205,7 +265,64 @@ interface Spark {
 }
 
 const PICKUP_SIZE = 8;
-const PICKUP_LIFE = 14;
+
+/**
+ * What a drop can be.
+ *
+ * `PICK_HEART` is 0 so the same number doubles as a player's power slot: a
+ * heart is spent the moment it is picked up and can never be the thing you
+ * are carrying, which makes 0 mean "nothing armed" for free.
+ */
+const PICK_HEART = 0;
+const PICK_RAPID = 1;
+const PICK_SHIELD = 2;
+const PICK_SPREAD = 3;
+
+/** The three powers, dealt from a shuffled bag rather than rolled. */
+const POWER_KINDS = [PICK_RAPID, PICK_SHIELD, PICK_SPREAD] as const;
+
+/**
+ * Seconds each power runs for, indexed by kind.
+ *
+ * All short, and the shield shortest: it is the only one that suspends the
+ * rules rather than bending them, and a long one would turn a wave into a
+ * walk. Spread gets the longest because it is the one whose value depends on
+ * what happens to wander in front of it.
+ */
+const POWER_SECONDS = [0, 6, 4, 7] as const;
+
+/** Seconds a drop waits to be collected, indexed by kind. A heart keeps the
+ *  long shelf life it always had — it is for whoever needs it, whenever they
+ *  do — while a power is an opportunity and should feel like one. */
+const PICKUP_LIFE = [14, 10, 10, 10] as const;
+
+/** Prebuilt: drawn every frame of the flash that follows a pickup. */
+const POWER_NAME = ["", "RAPID", "SHIELD", "SPREAD"] as const;
+/** How long that name sits over the player's head. */
+const POWER_FLASH_SECONDS = 0.9;
+
+/** Green for the instant one, yellow for the timed ones. */
+const PICK_COLOR: readonly Color[] = [C.good, C.accent, C.accent, C.accent];
+
+/**
+ * Kills between power drops, brutes excepted — a brute already pays out, and
+ * a heart and a power landing on the same square would read as one object.
+ *
+ * Six, so wave one's last walker drops the first one and it is sitting on the
+ * floor through the clear pause with nothing else on screen to look at. From
+ * there it works out at roughly one drop per player per wave, climbing with
+ * the wave counts.
+ */
+const DROP_EVERY = 6;
+
+/** The shield, drawn on the body: eight pips on a ring. One 22-unit mark
+ *  rather than eight 4-unit ones, and it survives the invulnerability blink
+ *  underneath it — a round thing around a square body reads as "inside
+ *  something" from across the room. */
+const SHIELD_PIPS = 8;
+const SHIELD_RADIUS = 11;
+const SHIELD_PIP = 4;
+const SHIELD_SPIN = 1.4;
 
 /* ---------------------------------------------------------------- waves -- */
 
@@ -213,18 +330,27 @@ const READY_SECONDS = 3;
 const CLEAR_SECONDS = 2.6;
 const WAVE_BONUS = 50;
 /** Longest wave the counts below can ask for, so the queue is one allocation. */
-const QUEUE_CAP = 40;
+const QUEUE_CAP = 52;
 
+/**
+ * The ramp, re-cut for an armed pair.
+ *
+ * The shape is unchanged — walkers from the start, runners from two, brutes
+ * from four — but every ceiling is higher, so the counts keep climbing to
+ * about wave sixteen instead of levelling off at seven. Power-ups are worth
+ * roughly a wave of headroom each; without this the run stopped getting
+ * harder right where it stopped being able to kill you.
+ */
 function waveWalkers(wave: number): number {
-  return Math.min(18, 4 + wave * 2);
+  return Math.min(26, 4 + wave * 2);
 }
 
 function waveRunners(wave: number): number {
-  return wave < 2 ? 0 : Math.min(10, Math.floor((wave - 1) * 1.5));
+  return wave < 2 ? 0 : Math.min(16, Math.floor((wave - 1) * 1.5));
 }
 
 function waveBrutes(wave: number): number {
-  return wave < 4 ? 0 : Math.min(4, Math.floor((wave - 2) / 2));
+  return wave < 4 ? 0 : Math.min(7, Math.floor((wave - 2) / 2));
 }
 
 /**
@@ -313,6 +439,9 @@ function main(): void {
       bleed: 0,
       revive: 0,
       beingRevived: false,
+      power: 0,
+      powerTime: 0,
+      powerFlash: 0,
     });
   }
 
@@ -331,7 +460,7 @@ function main(): void {
     flash: 0,
   }));
   const bullets = makeList<Bullet>(CAP_BULLETS, () => ({ x: 0, y: 0, vx: 0, vy: 0 }));
-  const pickups = makeList<Pickup>(CAP_PICKUPS, () => ({ x: 0, y: 0, life: 0 }));
+  const pickups = makeList<Pickup>(CAP_PICKUPS, () => ({ kind: PICK_HEART, x: 0, y: 0, life: 0 }));
   const sparks = makePool<Spark>(72, () => ({
     x: 0,
     y: 0,
@@ -353,6 +482,12 @@ function main(): void {
   let queueAt = 0;
   let spawnTimer = 0;
   let spawnInterval = 1;
+
+  /** The power bag, and the kill counter that draws from it. Starting past
+   *  the end forces a shuffle on the first draw. */
+  const bag = new Uint8Array(POWER_KINDS.length);
+  let bagAt = bag.length;
+  let killsToDrop = DROP_EVERY;
 
   // Strings drawn every frame, rebuilt only when the number behind them
   // changes — `onDraw` formats nothing.
@@ -378,6 +513,41 @@ function main(): void {
       s.life = k.rand(0.14, 0.34);
       s.color = color;
     }
+  }
+
+  /* --------------------------------------------------------------- drops -- */
+
+  /**
+   * The next power, from a bag reshuffled whenever it empties.
+   *
+   * A roll would happily give three shields in a row and no spread in a whole
+   * run, which at one power per drop is most of the game's variety gone. The
+   * bag is the same trick the wave queue plays, for the same reason.
+   */
+  function nextPower(): number {
+    if (bagAt >= bag.length) {
+      for (let i = 0; i < bag.length; i++) bag[i] = POWER_KINDS[i];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(k.rand(0, i + 1));
+        const tmp = bag[i];
+        bag[i] = bag[j];
+        bag[j] = tmp;
+      }
+      bagAt = 0;
+    }
+    return bag[bagAt++];
+  }
+
+  /** Put a drop on the floor. False when there is no room for it. */
+  function dropPickup(kind: number, x: number, y: number): boolean {
+    const pick = takeSlot(pickups);
+    if (pick === null) return false;
+    pick.kind = kind;
+    // A brute killed against the wall is 10 units in; keep the marker whole.
+    pick.x = k.clamp(x, PICKUP_SIZE, DESIGN_WIDTH - PICKUP_SIZE);
+    pick.y = k.clamp(y, ARENA_TOP + PICKUP_SIZE, ARENA_BOTTOM - PICKUP_SIZE);
+    pick.life = PICKUP_LIFE[kind];
+    return true;
   }
 
   /* ------------------------------------------------------------- helpers -- */
@@ -438,6 +608,9 @@ function main(): void {
     pl.ky = 0;
     pl.bleed = 0;
     pl.revive = 0;
+    pl.power = 0;
+    pl.powerTime = 0;
+    pl.powerFlash = 0;
   }
 
   function addScore(points: number): void {
@@ -471,7 +644,9 @@ function main(): void {
     queueLen = len;
     queueAt = 0;
 
-    spawnInterval = Math.max(0.3, 1.0 - n * 0.055);
+    // The floor is what a late wave actually feels like: `MAX_LIVE` caps the
+    // crowd, so past wave fourteen the pressure is replacement rate.
+    spawnInterval = Math.max(0.22, 1.0 - n * 0.055);
     spawnTimer = 0.35;
     phase = "wave";
   }
@@ -526,13 +701,12 @@ function main(): void {
     if (e.kind === BRUTE) {
       // The only thing that gives hearts back mid-wave, and it sits there
       // until somebody who needs it takes it.
-      const pick = takeSlot(pickups);
-      if (pick !== null) {
-        pick.x = e.x;
-        pick.y = e.y;
-        pick.life = PICKUP_LIFE;
-      }
+      dropPickup(PICK_HEART, e.x, e.y);
       shakeUntil = k.time() + 0.18;
+    } else if (--killsToDrop <= 0) {
+      // A full floor defers the drop rather than losing it: the counter is
+      // only reset once something actually landed.
+      if (dropPickup(nextPower(), e.x, e.y)) killsToDrop = DROP_EVERY;
     }
     dropSlot(enemies, i);
   }
@@ -581,6 +755,8 @@ function main(): void {
     bullets.count = 0;
     pickups.count = 0;
     sparks.clear();
+    killsToDrop = DROP_EVERY;
+    bagAt = bag.length;
     for (let p = 0; p < MAX_PLAYERS; p++) if (players[p].joined) placePlayer(p, HEARTS_MAX);
     wave = 0;
     waveText = "WAVE 1";
@@ -645,16 +821,43 @@ function main(): void {
     pl.y = k.clamp(pl.y, ARENA_TOP + half, ARENA_BOTTOM - half);
 
     if (pl.invuln > 0) pl.invuln -= dt;
+    if (pl.powerFlash > 0) pl.powerFlash -= dt;
+
+    // Wave time only: a shield taken as the last walker dies should still be
+    // a shield when the next wave walks in, not three seconds of an empty
+    // arena and a clear banner.
+    if (phase === "wave" && pl.power !== 0) {
+      pl.powerTime -= dt;
+      if (pl.powerTime <= 0) {
+        // A fizzle, so running out is a thing that happened rather than a
+        // thing the player notices two hits later.
+        emitSparks(pl.x, pl.y, 5, C.accent, 55);
+        pl.power = 0;
+        pl.powerTime = 0;
+      }
+    }
 
     pl.cooldown -= dt;
     if (phase === "wave" && input.down(p, "a") && pl.cooldown <= 0) {
-      const b = takeSlot(bullets);
-      if (b !== null) {
-        b.x = pl.x + pl.fx * (half + bulletSize);
-        b.y = pl.y + pl.fy * (half + bulletSize);
-        b.vx = pl.fx * BULLET_SPEED;
-        b.vy = pl.fy * BULLET_SPEED;
-        pl.cooldown = FIRE_COOLDOWN;
+      const shots = pl.power === PICK_SPREAD ? SPREAD_SHOTS : 1;
+      let fired = false;
+      for (let s = 0; s < shots; s++) {
+        const b = takeSlot(bullets);
+        // Out of slots: fire what fits and take the cooldown for it.
+        if (b === null) break;
+        const a = (s - (shots - 1) / 2) * SPREAD_ANGLE;
+        const cos = Math.cos(a);
+        const sin = Math.sin(a);
+        const dx = pl.fx * cos - pl.fy * sin;
+        const dy = pl.fx * sin + pl.fy * cos;
+        b.x = pl.x + dx * (half + bulletSize);
+        b.y = pl.y + dy * (half + bulletSize);
+        b.vx = dx * BULLET_SPEED;
+        b.vy = dy * BULLET_SPEED;
+        fired = true;
+      }
+      if (fired) {
+        pl.cooldown = pl.power === PICK_RAPID ? FIRE_COOLDOWN * RAPID_SCALE : FIRE_COOLDOWN;
       }
     }
   }
@@ -677,6 +880,11 @@ function main(): void {
       pl.revive = 0;
       pl.kx = 0;
       pl.ky = 0;
+      // Whatever was armed goes down with them. A shield left running on a
+      // body on the floor would be the strongest thing in the game waiting
+      // out its own timer.
+      pl.power = 0;
+      pl.powerTime = 0;
       shakeUntil = k.time() + 0.35;
     }
   }
@@ -807,10 +1015,20 @@ function main(): void {
 
       for (let p = 0; p < MAX_PLAYERS; p++) {
         const pl = players[p];
-        if (!pl.joined || pl.state !== ALIVE || pl.invuln > 0) continue;
+        if (!pl.joined || pl.state !== ALIVE) continue;
         if (Math.abs(pl.x - e.x) > half + BODY / 2) continue;
         if (Math.abs(pl.y - e.y) > half + BODY / 2) continue;
-        hitPlayer(p, e.x, e.y);
+        if (pl.power === PICK_SHIELD) {
+          // A shield is a wall, not a grace period: it costs nothing and
+          // throws the body off, which is what makes wading into a crowd to
+          // reach a downed partner a plan rather than a sacrifice. The stun
+          // check keeps one enemy from being re-thrown every frame.
+          if (e.stun > 0) continue;
+          emitSparks(e.x, e.y, 4, C.accent, 110);
+        } else {
+          if (pl.invuln > 0) continue;
+          hitPlayer(p, e.x, e.y);
+        }
         // The enemy bounces off too, so one walker cannot chew through three
         // hearts while the player is still recovering from the first.
         const dx = e.x - pl.x;
@@ -854,20 +1072,33 @@ function main(): void {
     // --- pickups ---
     for (let i = pickups.count - 1; i >= 0; i--) {
       const pick = pickups.items[i];
-      pick.life -= dt;
+      // The shelf life runs on wave time, like the powers themselves: the
+      // pause between waves is exactly when a pair walks over to collect.
+      if (phase === "wave") pick.life -= dt;
       if (pick.life <= 0) {
         dropSlot(pickups, i);
         continue;
       }
       for (let p = 0; p < MAX_PLAYERS; p++) {
         const pl = players[p];
+        if (!pl.joined || pl.state !== ALIVE) continue;
         // Nothing happens if you are already full: the heart stays on the
-        // floor for whoever needs it.
-        if (!pl.joined || pl.state !== ALIVE || pl.hearts >= HEARTS_MAX) continue;
+        // floor for whoever needs it. A power is taken by anyone standing,
+        // including over one still running — replacing your own shield with a
+        // spread is a decision, and a marker that refused you would just sit
+        // in the way of the wave.
+        if (pick.kind === PICK_HEART && pl.hearts >= HEARTS_MAX) continue;
         if (Math.abs(pl.x - pick.x) > (PICKUP_SIZE + BODY) / 2) continue;
         if (Math.abs(pl.y - pick.y) > (PICKUP_SIZE + BODY) / 2) continue;
-        pl.hearts++;
-        emitSparks(pick.x, pick.y, 8, C.good, 90);
+        if (pick.kind === PICK_HEART) {
+          pl.hearts++;
+          emitSparks(pick.x, pick.y, 8, C.good, 90);
+        } else {
+          pl.power = pick.kind;
+          pl.powerTime = POWER_SECONDS[pick.kind];
+          pl.powerFlash = POWER_FLASH_SECONDS;
+          emitSparks(pick.x, pick.y, 10, C.accent, 110);
+        }
         dropSlot(pickups, i);
         break;
       }
@@ -943,6 +1174,44 @@ function main(): void {
     }
   }
 
+  /**
+   * A power, in one place: the marker on the floor and the HUD badge are the
+   * same drawing at the same size, so the shape learned by walking onto one
+   * is the shape read in the corner of the eye for the next six seconds.
+   *
+   * Stripes, disc, wedge — and a cross for the heart. Nothing hollow: an
+   * empty heart pip is a hollow box, and so is an arrival telegraph.
+   */
+  function drawPower(kind: number, cx: number, cy: number, size: number, color: Color): void {
+    const half = size / 2;
+    if (kind === PICK_HEART) {
+      const arm = Math.max(1, Math.round(size * 0.36));
+      drawBox({ x: cx - half, y: cy - arm / 2, w: size, h: arm, color });
+      drawBox({ x: cx - arm / 2, y: cy - half, w: arm, h: size, color });
+      return;
+    }
+    if (kind === PICK_RAPID) {
+      const bar = Math.max(1, Math.round(size / 4));
+      for (let i = 0; i < 3; i++) {
+        drawBox({ x: cx - half, y: cy - half + i * (bar + 1), w: size, h: bar, color });
+      }
+      return;
+    }
+    if (kind === PICK_SHIELD) {
+      drawDot({ x: cx, y: cy, radius: half, color });
+      return;
+    }
+    drawTriangle({
+      x1: cx,
+      y1: cy - half,
+      x2: cx - half,
+      y2: cy + half,
+      x3: cx + half,
+      y3: cy + half,
+      color,
+    });
+  }
+
   function drawPlayerBody(p: number): void {
     const pl = players[p];
     if (!pl.joined || pl.state === OUT) return;
@@ -989,6 +1258,26 @@ function main(): void {
       return;
     }
 
+    // The shield goes on before the blink below, so the one power that
+    // changes what bodies do to you is never the thing that blinks off.
+    // Pips are clamped into the arena rather than drawn over the HUD: pressed
+    // against a wall the ring squashes, which is a fair picture of it.
+    if (pl.power === PICK_SHIELD) {
+      const spin = k.time() * SHIELD_SPIN;
+      for (let i = 0; i < SHIELD_PIPS; i++) {
+        const a = spin + (i / SHIELD_PIPS) * Math.PI * 2;
+        const ringX = pl.x + Math.cos(a) * SHIELD_RADIUS - SHIELD_PIP / 2;
+        const ringY = pl.y + Math.sin(a) * SHIELD_RADIUS - SHIELD_PIP / 2;
+        drawBox({
+          x: k.clamp(ringX, 0, DESIGN_WIDTH - SHIELD_PIP),
+          y: k.clamp(ringY, ARENA_TOP, ARENA_BOTTOM - SHIELD_PIP),
+          w: SHIELD_PIP,
+          h: SHIELD_PIP,
+          color: C.accent,
+        });
+      }
+    }
+
     // Invulnerability blinks the body, which is also the "I have just been
     // hit" reading — the two are the same fact.
     if (pl.invuln > 0 && Math.floor(k.time() * 14) % 2 === 0) return;
@@ -1000,6 +1289,19 @@ function main(): void {
       h: MUZZLE,
       color: C.white,
     });
+
+    // The name, once, over the head — the shapes are learned here rather than
+    // in the controls modal, which cannot say what a wedge does.
+    if (pl.power !== 0 && pl.powerFlash > 0) {
+      drawLabel({
+        text: POWER_NAME[pl.power],
+        x: pl.x,
+        y: pl.y - half - FONT_SMALL - 2,
+        size: FONT_SMALL,
+        color: C.accent,
+        anchor: "center",
+      });
+    }
   }
 
   function drawHud(): void {
@@ -1017,6 +1319,22 @@ function main(): void {
         color,
         anchor: p === 0 ? "left" : "right",
       });
+
+      // The badge sits between the pips and the wave counter, on that
+      // player's own side: what is armed and how much of it is left belongs
+      // next to how many hearts are left, not in the middle of the screen.
+      if (pl.power !== 0) {
+        const badgeX = p === 0 ? BADGE_X : DESIGN_WIDTH - BADGE_X;
+        drawPower(pl.power, badgeX, BADGE_CY, BADGE_SIZE, C.accent);
+        drawBar({
+          x: p === 0 ? BADGE_BAR_X : DESIGN_WIDTH - BADGE_BAR_X - BADGE_BAR_W,
+          y: BADGE_CY - BADGE_BAR_H / 2,
+          w: BADGE_BAR_W,
+          h: BADGE_BAR_H,
+          progress: pl.powerTime / POWER_SECONDS[pl.power],
+          color: C.accent,
+        });
+      }
 
       const pipsX = p === 0 ? 20 : DESIGN_WIDTH - 20;
       if (pl.joined && pl.state !== ALIVE) {
@@ -1059,8 +1377,7 @@ function main(): void {
     for (let i = 0; i < pickups.count; i++) {
       const pick = pickups.items[i];
       if (pick.life < 3 && Math.floor(pick.life * 8) % 2 === 0) continue;
-      drawBox({ x: pick.x - PICKUP_SIZE / 2, y: pick.y - 1.5, w: PICKUP_SIZE, h: 3, color: C.good });
-      drawBox({ x: pick.x - 1.5, y: pick.y - PICKUP_SIZE / 2, w: 3, h: PICKUP_SIZE, color: C.good });
+      drawPower(pick.kind, pick.x, pick.y, PICKUP_SIZE, PICK_COLOR[pick.kind]);
     }
 
     // Downed players under everything: they are scenery until someone gets
@@ -1335,6 +1652,9 @@ export const lastStandGame: GameDefinition = {
     // The revive has no button of its own — being there is the input — but it
     // is the one rule of this game a player cannot look up anywhere else.
     { buttons: ["up", "down", "left", "right"], label: "REVIVE — STAND ON THEM" },
+    // Same story: the yellow markers are collected by being there. Which one
+    // does what is taught on the field, by the name that flashes over you.
+    { buttons: ["up", "down", "left", "right"], label: "POWERS — WALK ONTO THEM" },
     { buttons: ["a", "start"], label: "JOIN IN / GO AGAIN" },
   ],
   drawPreview,
