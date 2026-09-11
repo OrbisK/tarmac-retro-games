@@ -42,7 +42,7 @@ import {
 
 const SCENE = "pong";
 
-const COURT_TOP = 22;
+const COURT_TOP = 28;
 const COURT_BOTTOM = DESIGN_HEIGHT;
 const COURT_HEIGHT = COURT_BOTTOM - COURT_TOP;
 

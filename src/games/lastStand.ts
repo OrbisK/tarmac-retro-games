@@ -94,18 +94,18 @@ const SCENE = "last-stand";
 
 /* ---------------------------------------------------------------- arena -- */
 
-const HUD_H = 22;
+const HUD_H = 28;
 /**
  * The power badge in the HUD: glyph then bar, mirrored for player two.
  *
- * It fits between the heart pips (which end at 44) and the wave counter in
+ * It fits between the heart pips (which end at 48) and the wave counter in
  * the middle, with room either side — the one place on the strip that is
  * empty and still on the right player's half.
  */
-const BADGE_X = 54;
+const BADGE_X = 58;
 const BADGE_CY = 8;
 const BADGE_SIZE = 8;
-const BADGE_BAR_X = 62;
+const BADGE_BAR_X = 66;
 const BADGE_BAR_W = 22;
 const BADGE_BAR_H = 6;
 const ARENA_TOP = HUD_H;
@@ -1336,7 +1336,8 @@ function main(): void {
         });
       }
 
-      const pipsX = p === 0 ? 20 : DESIGN_WIDTH - 20;
+      // Clear of the P1/P2 label beside them, which is 12-unit text.
+      const pipsX = p === 0 ? 24 : DESIGN_WIDTH - 24;
       if (pl.joined && pl.state !== ALIVE) {
         // Steady, not blinking: a blinked-off word leaves that player's half
         // of the HUD blank, which reads as "not playing" rather than "down".
@@ -1360,7 +1361,7 @@ function main(): void {
     }
 
     drawLabel({ text: waveText, x: CENTER_X, y: 1, size: FONT_SMALL, color: C.accent, anchor: "center" });
-    drawLabel({ text: scoreText, x: CENTER_X, y: 11, size: FONT_SMALL, color: C.text, anchor: "center" });
+    drawLabel({ text: scoreText, x: CENTER_X, y: 15, size: FONT_SMALL, color: C.text, anchor: "center" });
   }
 
   k.onDraw(() => {

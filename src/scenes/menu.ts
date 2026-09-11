@@ -20,6 +20,7 @@ import {
   drawPanel,
   drawRule,
   drawTriangle,
+  FONT_MIN,
   FONT_SMALL,
   FONT_TITLE,
   measureLabel,
@@ -68,8 +69,8 @@ import { GAMES } from "../games/registry";
  * thing that changes it, and leaving options comes back through here.
  */
 
-const HEADER_H = 15;
-const FOOTER_H = 17;
+const HEADER_H = 17;
+const FOOTER_H = 20;
 const CARD_TOP = HEADER_H + 4;
 const CARD_BOTTOM = DESIGN_HEIGHT - FOOTER_H - 4;
 const CARD_H = CARD_BOTTOM - CARD_TOP;
@@ -79,7 +80,7 @@ const CARD_W = DESIGN_WIDTH - CARD_MARGIN * 2;
 const STRIDE = DESIGN_WIDTH;
 
 const PREVIEW_INSET = 8;
-const FONT_GAME_TITLE = 24;
+const FONT_GAME_TITLE = 28;
 /**
  * The block under the preview: title, player count, tagline — and on a locked
  * card the stamp on a fourth line, which is the taller of the two. Stated as
@@ -89,6 +90,8 @@ const FONT_GAME_TITLE = 24;
 const CARD_TEXT_H =
   6 + FONT_GAME_TITLE + 4 + FONT_SMALL + 3 + FONT_SMALL + 3 + FONT_SMALL + PREVIEW_INSET;
 const PREVIEW_H = CARD_H - PREVIEW_INSET - CARD_TEXT_H;
+/** Room a tagline has before it starts crossing the card's own outline. */
+const TAGLINE_W = CARD_W - PREVIEW_INSET * 2;
 /**
  * `???` sits one size down, on `FONT_TITLE`: a locked card carries two extra
  * lines under it — the countdown and the stamp — and at 24 the last of them
@@ -217,6 +220,8 @@ function drawCard(opts: {
   locked: boolean;
   /** This card was just refused, and is on the bright half of the flash. */
   refused: boolean;
+  /** Measured on scene entry — see `taglineSizes`. */
+  taglineSize: number;
   now: number;
 }): void {
   const { game, focused, locked, refused } = opts;
@@ -290,7 +295,7 @@ function drawCard(opts: {
     text: locked ? unlockCountdownLine(game.id, opts.now) : game.tagline,
     x: textCenter,
     y,
-    size: FONT_SMALL,
+    size: locked ? FONT_SMALL : opts.taglineSize,
     color: locked ? C.accent : C.textDim,
     anchor: "center",
   });
@@ -317,6 +322,17 @@ function main(): void {
   // Read once, on entry: see the note at the top about why that is enough.
   const games = GAMES.filter((game) => gameEnabled(game.id));
   const count = games.length;
+  /**
+   * Tagline sizes, measured here rather than in `onDraw`, which must not
+   * allocate and runs this three times a frame mid-slide.
+   *
+   * A tagline is one line and the card is one card: the long ones drop to the
+   * floor size rather than running out over the outline. Measured rather than
+   * counted in characters, since the size that fits depends on the font.
+   */
+  const taglineSizes = games.map((game) =>
+    measureLabel(game.tagline, FONT_SMALL) <= TAGLINE_W ? FONT_SMALL : FONT_MIN,
+  );
   /** Unbounded: the shown game is this modulo `count`, so wrapping is smooth. */
   let virtualIndex = 0;
   /** Eased position of the track, in card units. */
@@ -487,6 +503,7 @@ function main(): void {
         // Gated on `locked` too, so browsing away mid-flash does not leave
         // the refusal colour on an unlocked card.
         refused: focused && locked && flashOn,
+        taglineSize: taglineSizes[index] ?? FONT_SMALL,
         now,
       });
     }

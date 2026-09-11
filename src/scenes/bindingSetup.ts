@@ -33,7 +33,7 @@ import { C, drawLabel, drawPanel, drawRule, FONT_SMALL, playerColor } from "../c
  */
 
 /** Top of the device selector, the first row on the screen. */
-const DEVICE_ROW_Y = 14.5;
+const DEVICE_ROW_Y = 17;
 /** The footer rule, and the floor the list has to stay off. */
 const FOOTER_Y = DESIGN_HEIGHT - 14;
 /** The device selector, one row per button, and the reset row. */

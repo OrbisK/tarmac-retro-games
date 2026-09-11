@@ -198,10 +198,10 @@ function main(): void {
       color: C.textDim,
       anchor: "right",
     });
-    drawRule(14);
+    drawRule(17);
 
     for (let slot = 0; slot < MAX_PLAYERS; slot++) {
-      drawSlot(slot, 4 + slot * (COL_W + 8), 19);
+      drawSlot(slot, 4 + slot * (COL_W + 8), 22);
     }
 
     // Keyboard row, so a keyboard-only setup is diagnosable too.

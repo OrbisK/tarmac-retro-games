@@ -79,7 +79,8 @@ const PANEL_X = [2, DESIGN_WIDTH - 2 - PANEL_W] as const;
 /** Round-win marks. 7 square clears the 5-unit floor with a gap to spare. */
 const PIP_SIZE = 7;
 const PIP_STRIDE = 10;
-const PIP_X = [20, DESIGN_WIDTH - 20 - PIP_SIZE] as const;
+/** Clear of the P1/P2 label beside them, which is 12-unit text. */
+const PIP_X = [25, DESIGN_WIDTH - 25 - PIP_SIZE] as const;
 
 /** Baseline for the next-piece cell — one of the two things that scale. */
 const NEXT_CELL_BASE = 5;

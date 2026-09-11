@@ -24,8 +24,14 @@ import {
  * button does.
  */
 
-/** Glyph box side, in design units. Sized so the letter clears 10 units. */
-export const GLYPH_SIZE = 14;
+/**
+ * Glyph box side, in design units.
+ *
+ * Derived from the text size rather than stated: the letter inside a glyph is
+ * drawn at 0.72 of the box, and a prompt whose letter is smaller than the
+ * word next to it reads as a different, quieter kind of thing.
+ */
+export const GLYPH_SIZE = Math.round(FONT_SMALL / 0.72);
 
 const FACE_LETTER: Partial<Record<Button, string>> = {
   a: "A",

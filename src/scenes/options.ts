@@ -43,6 +43,7 @@ import {
   drawPanel,
   drawRule,
   drawTriangle,
+  FONT_MIN,
   FONT_SMALL,
 } from "../core/ui";
 import { GAMES } from "../games/registry";
@@ -95,8 +96,19 @@ const ROWS: readonly Row[] = [
   { kind: "reset" },
 ];
 
+/**
+ * The one table on the cabinet that cannot take the larger text.
+ *
+ * A row is a 12-character title, the state, six time fields and the status
+ * that falls out of them — laid out, they come to within thirty units of the
+ * box at `FONT_MIN` and past it at anything bigger. The screen is an
+ * operator's, read standing at the machine rather than back from it, so this
+ * is where the floor gets used; everything around the rows is at `FONT_SMALL`
+ * like the rest of the cabinet.
+ */
+const ROW_FONT = FONT_MIN;
 const ROW_H = 13;
-const ROWS_TOP = 19;
+const ROWS_TOP = 21;
 const CARET_X = 4;
 const LABEL_X = 14;
 const VALUE_X = 122;
@@ -240,12 +252,12 @@ function idleStatus(): string {
 }
 
 function drawScaleRow(y: number): void {
-  drawLabel({ text: "GAME SCALE", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
+  drawLabel({ text: "GAME SCALE", x: LABEL_X, y, size: ROW_FONT, color: C.text });
   drawLabel({
     text: scaleText(),
     x: VALUE_X,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     color: C.accent,
   });
   const selected = gameScaleIndex();
@@ -273,12 +285,12 @@ function drawScaleRow(y: number): void {
  */
 function drawIdleRow(y: number): void {
   const selected = idleReturnIndex();
-  drawLabel({ text: "IDLE TIMEOUT", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
+  drawLabel({ text: "IDLE TIMEOUT", x: LABEL_X, y, size: ROW_FONT, color: C.text });
   drawLabel({
     text: idleReturnText(),
     x: VALUE_X,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     // Off is a state worth spotting from the doorway: this is the one setting
     // that stops the cabinet putting itself back on the menu.
     color: selected > 0 ? C.accent : C.bad,
@@ -325,7 +337,7 @@ function drawGameRow(game: GameDefinition, y: number, field: number, now: number
     text: game.title,
     x: LABEL_X,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     color: off ? C.textDim : C[game.accent],
   });
 
@@ -356,7 +368,7 @@ function drawGameRow(game: GameDefinition, y: number, field: number, now: number
       text: fieldText(game.id, i),
       x: FIELD_X[i] + FIELD_W[i] / 2,
       y,
-      size: FONT_SMALL,
+      size: ROW_FONT,
       color,
       anchor: "center",
     });
@@ -365,7 +377,7 @@ function drawGameRow(game: GameDefinition, y: number, field: number, now: number
     text: ":",
     x: COLON_X,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     color: timed ? C.text : C.textDim,
   });
 
@@ -374,7 +386,7 @@ function drawGameRow(game: GameDefinition, y: number, field: number, now: number
     text: off ? "HIDDEN" : locked ? unlockCountdownText(game.id, now) : "OPEN",
     x: DESIGN_WIDTH - 4,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     color: off || locked ? C.bad : C.good,
     anchor: "right",
   });
@@ -382,12 +394,12 @@ function drawGameRow(game: GameDefinition, y: number, field: number, now: number
 
 function drawResetRow(y: number): void {
   const customised = settingsAreCustomised() || unlocksAreCustomised() || rosterIsCustomised();
-  drawLabel({ text: "RESET DEFAULTS", x: LABEL_X, y, size: FONT_SMALL, color: C.text });
+  drawLabel({ text: "RESET DEFAULTS", x: LABEL_X, y, size: ROW_FONT, color: C.text });
   drawLabel({
     text: customised ? "CHANGED" : "AT DEFAULT",
     x: VALUE_X,
     y,
-    size: FONT_SMALL,
+    size: ROW_FONT,
     color: customised ? C.accent : C.textDim,
   });
 }
@@ -419,11 +431,14 @@ function drawSamples(anchor: number, selected: number): void {
       fill: C.bg,
       outline: index === selected ? C[game.accent] : C.dim,
     });
+    // On the floor like the rows, not on `FONT_SMALL` like the caption under
+    // it: the continuation arrows share this line, and a 12-character title
+    // set any larger runs straight into them.
     drawLabel({
       text: game.title,
       x: x + panelW / 2,
       y: PANEL_TOP + 3,
-      size: FONT_SMALL,
+      size: ROW_FONT,
       color: C[game.accent],
       anchor: "center",
     });
@@ -453,9 +468,9 @@ function drawSamples(anchor: number, selected: number): void {
     }
     game.drawScaleSample?.(
       x + 3,
-      PANEL_TOP + 3 + FONT_SMALL + 3,
+      PANEL_TOP + 3 + ROW_FONT + 3,
       panelW - 6,
-      PANEL_H - (3 + FONT_SMALL + 3) - 4,
+      PANEL_H - (3 + ROW_FONT + 3) - 4,
     );
   }
 }
@@ -554,7 +569,7 @@ function main(): void {
       color: C.textDim,
       anchor: "right",
     });
-    drawRule(14);
+    drawRule(16);
 
     for (let i = 0; i < ROWS.length; i++) {
       const row = ROWS[i];
@@ -607,7 +622,7 @@ function main(): void {
 
     drawHints({
       x: 4,
-      y: DESIGN_HEIGHT - 16,
+      y: DESIGN_HEIGHT - 20,
       hints: editing
         ? GAME_EDIT_HINTS
         : ROWS[rowIndex].kind === "scale"

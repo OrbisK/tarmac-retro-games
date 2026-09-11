@@ -42,7 +42,7 @@ import {
 const SCENE = "snake-duel";
 
 const CELL_BASE = 8;
-const HEADER_H = 16;
+const HEADER_H = 19;
 /** Height available to the board, below the header rule. */
 const BOARD_H = DESIGN_HEIGHT - HEADER_H;
 /**

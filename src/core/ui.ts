@@ -33,11 +33,23 @@ export function playerColor(player: number): Color {
  * Text sizes, in design units.
  *
  * Because text is now rasterised at its final pixel size, these are free to be
- * small numbers: 10 units on a 1440-tall screen is a 60px glyph, drawn sharp.
+ * small numbers: 12 units on a 1440-tall screen is a 72px glyph, drawn sharp.
+ *
+ * They sit a fifth above the readable floor rather than on it. Sharpness is
+ * not legibility: at cabinet distance the limit on a word is how big it is,
+ * not how cleanly it is drawn, and every one of these is read by someone
+ * standing back from the machine while a game element they are actually
+ * looking at holds their eye. Game geometry did **not** move with them — a
+ * ball, a cell and a body are the sizes they were tuned at, so the effect is
+ * text reading larger *against* the game rather than a zoom of everything.
+ *
+ * `FONT_MIN` is the floor from the design rules, and the one place a layout
+ * is allowed to fall back to when it genuinely cannot hold the size above.
  */
-export const FONT_SMALL = 10;
-export const FONT_BODY = 12;
-export const FONT_TITLE = 20;
+export const FONT_MIN = 10;
+export const FONT_SMALL = 12;
+export const FONT_BODY = 14;
+export const FONT_TITLE = 24;
 /**
  * In-game countdowns and round verdicts — the numbers a player reads while
  * their hands are busy, from further back than anything else on screen.
@@ -46,7 +58,7 @@ export const FONT_TITLE = 20;
  * Long lines (a "PLAYER 1 WINS" banner) stay on `FONT_TITLE`: they are
  * already large, and at 2x scale a 13-character line would not fit the box.
  */
-export const FONT_HUGE = 28;
+export const FONT_HUGE = 34;
 
 export const CENTER_X = DESIGN_WIDTH / 2;
 export const CENTER_Y = DESIGN_HEIGHT / 2;
