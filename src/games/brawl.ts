@@ -54,8 +54,15 @@ const SCENE = "brawl";
 
 /* ---------------------------------------------------------------- stage -- */
 
-/** Screen y of the floor: every fighter's feet rest here at height 0. */
-const FLOOR_Y = 208;
+/**
+ * Screen y of the floor: every fighter's feet rest here at height 0.
+ *
+ * Measured up from the bottom of the box rather than down from the top, so
+ * the ground strip stays the same 32 units and the extra height of a square
+ * box goes where it belongs — into sky nobody has to read. Everything else on
+ * the stage, skyline and moon included, is stated relative to this line.
+ */
+const FLOOR_Y = DESIGN_HEIGHT - 32;
 const WALL_L = 14;
 const WALL_R = DESIGN_WIDTH - 14;
 
@@ -81,16 +88,17 @@ const SKYLINE: readonly (readonly [number, number])[] = [
 
 /** A moon, so the sky is somewhere rather than a hole. */
 const MOON_X = 252;
-const MOON_Y = 74;
+const MOON_Y = FLOOR_Y - 134;
 const MOON_R = 9;
 
 /* --------------------------------------------------------------- bodies -- */
 
 /**
- * A fighter is 96 units tall in a 240-unit box — two fifths of the screen, so
- * a guard, a crouch and an extended limb are separate silhouettes read from
- * across the room. The stage is still eight body widths wide, which is the
- * room the spacing game needs on a screen that never scrolls.
+ * A fighter is 96 units tall — a head and shoulders above the skyline, so a
+ * guard, a crouch and an extended limb are separate silhouettes read from
+ * across the room. Deliberately not sized from the box: the stage is eight
+ * body widths wide and the width did not change, and a fighter who grew with
+ * a taller box would have a shorter jump in his own body-heights.
  */
 const BODY_W = 34;
 const STAND_H = 96;

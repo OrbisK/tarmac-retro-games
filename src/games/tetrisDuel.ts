@@ -56,7 +56,13 @@ const WELL_W = COLS * CELL;
 const WELL_H = ROWS * CELL;
 
 const HEADER_H = 18;
-const WELL_TOP = 20;
+/**
+ * The well keeps its 10x20 at a 10-unit cell and is centred in whatever is
+ * left under the header, rather than growing with the box: those dimensions
+ * *are* the game. Everything else in the half — the panel, the meter, the
+ * clear banner — hangs off this, so the whole half moves with it.
+ */
+const WELL_TOP = HEADER_H + Math.round((DESIGN_HEIGHT - HEADER_H - WELL_H) / 2);
 const WELL_BOTTOM = WELL_TOP + WELL_H;
 
 const PANEL_W = 44;

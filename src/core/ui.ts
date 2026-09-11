@@ -191,7 +191,7 @@ export function drawDottedColumn(x: number, dash = 4, gap = 4, color: Color = C.
  *
  * Content that deliberately overflows the design box — a carousel card sliding
  * out, say — would otherwise be drawn over the letterbox. Calling this last
- * clips it, and costs nothing on a 4:3 window where there are no bars.
+ * clips it, and costs nothing on a square window where there are no bars.
  */
 export function drawLetterboxBars(): void {
   const [left, top, boxW, boxH] = viewportBox();

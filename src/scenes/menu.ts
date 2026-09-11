@@ -79,8 +79,16 @@ const CARD_W = DESIGN_WIDTH - CARD_MARGIN * 2;
 const STRIDE = DESIGN_WIDTH;
 
 const PREVIEW_INSET = 8;
-const PREVIEW_H = 124;
 const FONT_GAME_TITLE = 24;
+/**
+ * The block under the preview: title, player count, tagline — and on a locked
+ * card the stamp on a fourth line, which is the taller of the two. Stated as
+ * a height rather than measured so the preview, which is what the card is
+ * mostly made of, can take everything the card has left.
+ */
+const CARD_TEXT_H =
+  6 + FONT_GAME_TITLE + 4 + FONT_SMALL + 3 + FONT_SMALL + 3 + FONT_SMALL + PREVIEW_INSET;
+const PREVIEW_H = CARD_H - PREVIEW_INSET - CARD_TEXT_H;
 /**
  * `???` sits one size down, on `FONT_TITLE`: a locked card carries two extra
  * lines under it — the countdown and the stamp — and at 24 the last of them

@@ -21,7 +21,7 @@ if (!canvas) throw new Error('Missing <canvas id="game"> in index.html');
  */
 export const k = kaplay({
   canvas,
-  // The letterbox colour: the 4:3 play area is painted over it per scene.
+  // The letterbox colour: the square play area is painted over it per scene.
   background: PALETTE.black,
   global: false,
   focus: true,

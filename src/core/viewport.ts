@@ -6,11 +6,11 @@ import { k } from "./k";
  *
  * The canvas fills the window at the monitor's own resolution, so there is no
  * fixed internal framebuffer to upscale from. What stays fixed is the
- * *proportions*: a 4:3 box is fitted into the window, and one design unit
- * becomes `scale` pixels inside it. Everything is drawn through `px`/`py`/`pu`,
- * which means a paddle 4 units wide is genuinely 4 * scale pixels of crisp
- * geometry, and text is rasterised at its final pixel size rather than being
- * blown up from a small atlas.
+ * *proportions*: the square design box is fitted into the window, and one
+ * design unit becomes `scale` pixels inside it. Everything is drawn through
+ * `px`/`py`/`pu`, which means a paddle 4 units wide is genuinely 4 * scale
+ * pixels of crisp geometry, and text is rasterised at its final pixel size
+ * rather than being blown up from a small atlas.
  *
  * Read straight from `k.width()`/`k.height()` every frame rather than via
  * `onResize`: that handler is declared to return `void`, so it cannot be
@@ -26,7 +26,7 @@ let boxHeight = 0;
 export function updateViewport(): void {
   const w = k.width();
   const h = k.height();
-  // Fit the design aspect inside the window; on a 4:3 monitor this is a no-op.
+  // Fit the design aspect inside the window; on a square monitor this is a no-op.
   scale = Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
   boxWidth = DESIGN_WIDTH * scale;
   boxHeight = DESIGN_HEIGHT * scale;
@@ -39,7 +39,7 @@ export function viewportScale(): number {
   return scale;
 }
 
-/** The 4:3 play area in device pixels: `[left, top, width, height]`. */
+/** The square play area in device pixels: `[left, top, width, height]`. */
 export function viewportBox(): readonly [number, number, number, number] {
   return [left, top, boxWidth, boxHeight];
 }

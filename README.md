@@ -2,7 +2,7 @@
 
 A small arcade cabinet: one menu, several 2-player retro games, built on
 [KAPLAY](https://kaplayjs.com/). Renders at the **monitor's own resolution**,
-with a 4:3 layout letterboxed into the window.
+with a square layout letterboxed into the window.
 
 ```bash
 npm install
@@ -353,7 +353,7 @@ src/
 
 Two constraints apply to everything in here, including new games:
 
-**Design in low resolution.** The 320x240 design space is the authority for
+**Design in low resolution.** The 320x320 design space is the authority for
 every layout and gameplay decision — chunky shapes, few text sizes, no detail
 finer than about one design unit. Rendering at native resolution makes it
 *sharp*, not *detailed*: adding sub-unit detail because the panel can show it
@@ -373,11 +373,11 @@ device resolution (`devicePixelRatio` included), so output is limited by the
 monitor and nothing is ever rendered small and blown up.
 
 What is fixed is the *proportions*. `DESIGN_WIDTH x DESIGN_HEIGHT` in
-`core/config.ts` (320x240) defines a **design-unit** space: a 4:3 box is fitted
-into the window, `core/viewport.ts` works out how many device pixels one unit
-is worth, and every draw call converts. A 4-unit ball is 4 units on a 640x480
-panel and on a 4K one — sharp on both, because text is rasterised at its final
-pixel size rather than scaled up from a small atlas.
+`core/config.ts` (320x320) defines a **design-unit** space: a square box is
+fitted into the window, `core/viewport.ts` works out how many device pixels one
+unit is worth, and every draw call converts. A 4-unit ball is 4 units on a
+640x640 panel and on a 4K one — sharp on both, because text is rasterised at
+its final pixel size rather than scaled up from a small atlas.
 
 All gameplay tuning (speeds, sizes, grid cells) is in design units, so raising
 the design numbers rescales the whole cabinet — finer detail, proportionally
@@ -391,9 +391,12 @@ raw device pixels and ignores the viewport — the one class of mistake here tha
 typechecking will not catch. Camera-space effects need converting too, which is
 why the shake calls read `k.shake(pu(...))`.
 
-Non-4:3 windows get black bars rather than a stretched or re-flowed layout. On
-a 4:3 cabinet monitor that is a no-op; letting layouts adapt to arbitrary
-aspect ratios would be per-game work.
+Non-square windows get black bars rather than a stretched or re-flowed layout.
+On a square cabinet monitor that is a no-op; letting layouts adapt to arbitrary
+aspect ratios would be per-game work — which is also why the move from 4:3 to
+a square box was made in `config.ts` and then paid for by hand in the layouts
+that had a fixed vertical shape (the menu card's preview, the Tetris well,
+Brawl's floor line, the Pong paddle).
 
 ### Game scale
 
@@ -403,7 +406,7 @@ with your hands busy: the Pong ball and a countdown. **Game scale** in the
 options screen multiplies those — `1x`, `1.25x` (default), `1.5x`, `1.75x`,
 `2x`.
 
-What it does **not** do is zoom the design box. 320x240 stays the layout
+What it does **not** do is zoom the design box. 320x320 stays the layout
 authority, the Pong court keeps its dimensions and all of its speeds, and the
 menu and chrome are untouched. Only the elements a game declares as
 scale-sensitive grow, so raising the scale trades board area for chunk:

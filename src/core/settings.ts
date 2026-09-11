@@ -17,7 +17,7 @@ const STORAGE_KEY = "tarmac.settings.v1";
  * How much bigger a game draws its gameplay elements than their baseline
  * size: the Pong ball and paddles, the Snake cell, the in-game countdowns.
  *
- * This deliberately does **not** touch the design box. 320x240 stays the
+ * This deliberately does **not** touch the design box. 320x320 stays the
  * layout authority, the Pong court keeps its dimensions and its speeds, and
  * the menu and chrome are untouched — only the things a player has to track
  * mid-rally get chunkier, which is the part that loses at cabinet distance.

@@ -31,8 +31,8 @@ import {
  * session no matter how long it runs.
  *
  * The cell is a *baseline*: the board is laid out at `scaleUnits(CELL_BASE)`,
- * so raising the game scale trades board area for chunkier cells — 40x28 at
- * 1x, 20x14 at 2x (see `core/settings.ts`). The tick rate does not scale with
+ * so raising the game scale trades board area for chunkier cells — 40x38 at
+ * 1x, 20x19 at 2x (see `core/settings.ts`). The tick rate does not scale with
  * it: a grid game's feel is cells per second, not units per second, so the
  * reaction time per cell stays put and a coarser board just means shorter
  * rounds. `CAP` is sized for the *finest* board, so the ring buffers are one

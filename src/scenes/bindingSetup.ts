@@ -32,9 +32,25 @@ import { C, drawLabel, drawPanel, drawRule, FONT_SMALL, playerColor } from "../c
  * pair of identical pads fixes both.
  */
 
-const ROW_H = 13;
+/** Top of the device selector, the first row on the screen. */
+const DEVICE_ROW_Y = 14.5;
+/** The footer rule, and the floor the list has to stay off. */
+const FOOTER_Y = DESIGN_HEIGHT - 14;
+/** The device selector, one row per button, and the reset row. */
+const ROW_COUNT = BUTTONS.length + 2;
+/**
+ * Row pitch, divided out of the box rather than stated.
+ *
+ * The list is the whole screen here — there is nothing else to put under it —
+ * so the rows take the height the box has and the screen fills at any design
+ * aspect. It is also what makes the glyphs big enough to carry their letter.
+ */
+const ROW_H = Math.floor((FOOTER_Y - 7 - DEVICE_ROW_Y) / ROW_COUNT);
 const GLYPH_SIZE = ROW_H - 2;
-const HEADER_H = 27;
+/** Text is 10 units in a taller row: centre it rather than pin it to the top. */
+const TEXT_DY = (ROW_H - FONT_SMALL) / 2;
+const GLYPH_DY = (ROW_H - GLYPH_SIZE) / 2;
+const HEADER_H = Math.round(DEVICE_ROW_Y + ROW_H);
 /** Glyph column, indented to leave room for the selection caret. */
 const GLYPH_X = 12;
 /** Left edge of the name column, past the widest glyph (the START box). */
@@ -94,7 +110,6 @@ function main(): void {
   installQuitToMenu();
 
   /** Row 0 is the target selector; rows 1..12 are buttons; last row resets. */
-  const ROW_COUNT = BUTTONS.length + 2;
   const RESET_ROW = ROW_COUNT - 1;
 
   refreshTargets();
@@ -243,30 +258,30 @@ function main(): void {
     const targetActive = row === 0;
     drawPanel({
       x: 2,
-      y: 14.5,
+      y: DEVICE_ROW_Y,
       w: DESIGN_WIDTH - 4,
       h: ROW_H,
       fill: targetActive ? C.bgAlt : C.bg,
       outline: targetActive ? C.accent : C.dim,
     });
-    drawButtonGlyph({ x: GLYPH_X, y: 15, button: "left", size: GLYPH_SIZE });
+    drawButtonGlyph({ x: GLYPH_X, y: DEVICE_ROW_Y + GLYPH_DY, button: "left", size: GLYPH_SIZE });
     drawButtonGlyph({
       x: GLYPH_X + glyphWidth("left", GLYPH_SIZE) + 1,
-      y: 15,
+      y: DEVICE_ROW_Y + GLYPH_DY,
       button: "right",
       size: GLYPH_SIZE,
     });
     drawLabel({
       text: "DEVICE",
       x: LABEL_X,
-      y: 16,
+      y: DEVICE_ROW_Y + TEXT_DY,
       size: FONT_SMALL,
       color: targetActive ? C.text : C.textDim,
     });
     drawLabel({
       text: target ? targetName(target) : "none",
       x: VALUE_X,
-      y: 16,
+      y: DEVICE_ROW_Y + TEXT_DY,
       size: FONT_SMALL,
       color: target?.kind === "pad" ? playerColor(target.slot) : C.text,
     });
@@ -288,22 +303,21 @@ function main(): void {
           fill: C.bgAlt,
           outline: isCapturing ? C.accent : C.dim,
         });
-        drawLabel({ text: ">", x: 5, y: y + 2, size: FONT_SMALL, color: C.accent });
+        drawLabel({ text: ">", x: 5, y: y + TEXT_DY, size: FONT_SMALL, color: C.accent });
       }
-      // Letter suppressed: at 11 units a letter inside the circle would fall
-      // under the readable minimum, and the name column is right beside it.
+      // The letter is drawn here, unlike the menu's own rows: the glyph is a
+      // row tall, which clears the readable minimum with room to spare.
       drawButtonGlyph({
         x: GLYPH_X,
-        y: y + 1,
+        y: y + GLYPH_DY,
         button,
         size: GLYPH_SIZE,
-        letter: false,
         ...(target?.kind === "pad" ? { player: target.slot } : {}),
       });
       drawLabel({
         text: BUTTON_LABELS[button],
         x: LABEL_X,
-        y: y + 2,
+        y: y + TEXT_DY,
         size: FONT_SMALL,
         color: active ? C.text : C.textDim,
       });
@@ -313,7 +327,7 @@ function main(): void {
         drawLabel({
           text: hint,
           x: DESIGN_WIDTH - 6,
-          y: y + 2,
+          y: y + TEXT_DY,
           size: FONT_SMALL,
           color: C.textDim,
           anchor: "right",
@@ -326,7 +340,7 @@ function main(): void {
             ? bindingText(target, button)
             : "--",
         x: VALUE_X,
-        y: y + 2,
+        y: y + TEXT_DY,
         size: FONT_SMALL,
         color: isCapturing ? C.accent : active ? C.good : C.textDim,
       });
@@ -344,25 +358,25 @@ function main(): void {
         fill: C.bgAlt,
         outline: C.bad,
       });
-      drawLabel({ text: ">", x: 5, y: resetY + 2, size: FONT_SMALL, color: C.bad });
+      drawLabel({ text: ">", x: 5, y: resetY + TEXT_DY, size: FONT_SMALL, color: C.bad });
     }
     drawLabel({
       text: "RESET DEVICE",
       x: LABEL_X,
-      y: resetY + 2,
+      y: resetY + TEXT_DY,
       size: FONT_SMALL,
       color: resetActive ? C.bad : C.textDim,
     });
     drawLabel({
       text: "press RIGHT",
       x: VALUE_X,
-      y: resetY + 2,
+      y: resetY + TEXT_DY,
       size: FONT_SMALL,
       color: resetActive ? C.text : C.dim,
     });
 
     // Footer: status line, then the controls that always work.
-    const footerY = DESIGN_HEIGHT - 14;
+    const footerY = FOOTER_Y;
     drawRule(footerY - 3);
     if (statusLeft > 0) {
       drawLabel({ text: status, x: 4, y: footerY, size: FONT_SMALL, color: C.good });

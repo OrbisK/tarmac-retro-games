@@ -9,15 +9,20 @@
  * Rendering happens at the monitor's real resolution; these numbers only fix
  * the proportions and the aspect ratio. `core/viewport.ts` works out how many
  * device pixels one design unit is worth and every draw call converts, so a
- * 4x4 unit ball is 4 units on a 640x480 panel and on a 4K one — sharp on both,
+ * 4x4 unit ball is 4 units on a 640x640 panel and on a 4K one — sharp on both,
  * because nothing is ever rendered small and scaled up.
+ *
+ * The box is **square**. Layouts do not re-flow at runtime and never did —
+ * the aspect is fixed here and a window of any other shape letterboxes around
+ * it — so the change from 4:3 was made where every layout is stated: chrome
+ * kept its height and the play area between it took the extra units.
  *
  * Gameplay tuning (speeds, sizes, grid cells) is all expressed in these units,
  * so changing the numbers below rescales the whole design without touching a
  * single game. Raise them for finer detail and proportionally smaller UI.
  */
 export const DESIGN_WIDTH = 320;
-export const DESIGN_HEIGHT = 240;
+export const DESIGN_HEIGHT = 320;
 
 
 /** Number of player slots the cabinet supports. */

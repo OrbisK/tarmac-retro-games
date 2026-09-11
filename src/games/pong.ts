@@ -47,10 +47,21 @@ const COURT_BOTTOM = DESIGN_HEIGHT;
 const COURT_HEIGHT = COURT_BOTTOM - COURT_TOP;
 
 const PADDLE_W_BASE = 4;
-const PADDLE_H_BASE = 30;
+/**
+ * The paddle's height and speed are stated as a share of the court, not as a
+ * flat number of units.
+ *
+ * How much of the court one player can cover, and how fast they can get from
+ * one end of it to the other, is the whole game — so both are tied to the
+ * court's height. Leaving them at the numbers a 4:3 court was tuned with
+ * would have handed a square court a paddle a third smaller and a third
+ * slower, in units that mean the same thing to the ball as they always did.
+ */
+const PADDLE_H_BASE = Math.round(COURT_HEIGHT * 0.138);
+/** Units per second — three quarters of a court height, whatever it is. */
+const PADDLE_SPEED = Math.round(COURT_HEIGHT * 0.757);
 /** Distance from the wall to the paddle's centre line. */
 const PADDLE_INSET = 10;
-const PADDLE_SPEED = 165;
 
 const BALL_SIZE_BASE = 4;
 const SPARK_SIZE_BASE = 2;

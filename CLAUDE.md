@@ -5,7 +5,7 @@ these are the rules that are easy to break without noticing.
 
 ## Design in low resolution, render at native
 
-`DESIGN_WIDTH x DESIGN_HEIGHT` (320x240) in `src/core/config.ts` is a
+`DESIGN_WIDTH x DESIGN_HEIGHT` (320x320) in `src/core/config.ts` is a
 **design-unit** space, not a framebuffer. Rendering happens at the monitor's
 real resolution, but every layout and gameplay decision is made in these
 coarse units — chunky shapes, few text sizes, nothing that depends on detail
@@ -20,7 +20,7 @@ interactive or status marks at 5 units square.
 
 A player-facing multiplier on the handful of things a game sizes from it — the
 Pong ball and paddles, the Snake cell, in-game countdowns. It is **not** a zoom
-of the design box: 320x240 stays the authority, and courts, speeds, tick rates,
+of the design box: 320x320 stays the authority, and courts, speeds, tick rates,
 layout margins, the menu and all chrome are unaffected.
 
 - Tune the **baseline** number, then draw with `scaleUnits(BASE)` from

@@ -45,7 +45,7 @@ export default defineConfig({
         start_url: "./",
         scope: "./",
         // Fullscreen first: the cabinet is the only thing on its monitor, and
-        // a title bar would eat into the 4:3 play area.
+        // a title bar would eat into the square play area.
         display: "fullscreen",
         display_override: ["fullscreen", "standalone"],
         orientation: "landscape",
