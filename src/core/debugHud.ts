@@ -7,7 +7,12 @@ import { pwaStatus } from "./pwa";
 import { C, drawLabel, drawPanel, FONT_SMALL, measureLabel } from "./ui";
 
 /**
- * Leak / performance overlay. Toggle with F3, or Back + Start together on a pad.
+ * Leak / performance overlay. Toggle with F3.
+ *
+ * Keyboard only, on purpose: the pad shortcut it used to have (hold Back, tap
+ * Start) sat on two buttons a player reaches for mid-match, and the overlay is
+ * an operator's tool — whoever wants it has the keyboard that the setup
+ * screens already need.
  *
  * The point of this is the long run: leave the cabinet cycling between games
  * for an hour and watch `obj` and `heap` come back to the same numbers. A
@@ -96,9 +101,6 @@ export function installDebugHud(): void {
     {
       id: "debugHud",
       update() {
-        // Pad shortcut: hold Back and tap Start.
-        if (input.anyDown("back") && input.anyPressed("start")) visible = !visible;
-
         sampleTimer -= k.dt();
         if (sampleTimer <= 0) {
           sampleTimer = SAMPLE_INTERVAL;

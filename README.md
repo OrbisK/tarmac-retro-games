@@ -20,7 +20,7 @@ npm run typecheck
 | Start | Start | Start | `Enter` | `Shift` |
 | Quit to menu | hold Select 0.7s | hold Select 0.7s | hold `Esc` | hold `Backspace` |
 | Controls modal (menu) | Y | Y | `E` | `/` |
-| Debug overlay | hold Select + tap Start | " | `F3` | `F3` |
+| Debug overlay | — (keyboard only) | " | `F3` | `F3` |
 | Options / input test | see calibration below | " | `F5` / `F4` | `F5` / `F4` |
 | Cancel the idle timeout | anything at all | " | any key | any key |
 
